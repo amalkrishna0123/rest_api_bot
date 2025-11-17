@@ -1,0 +1,14 @@
+Django>=4.2
+djangorestframework>=3.14
+openai>=1.0.0
+google-cloud-speech
+pytesseract
+Pillow
+pdfplumber
+pdf2image
+numpy
+opencv-python-headless
+easyocr
+passporteye
+requests
+mindee
