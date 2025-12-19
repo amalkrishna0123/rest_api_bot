@@ -86,24 +86,24 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 # DATABASES = {
 #     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': 'chatapirest',  # Replace with your database name
-#         'USER': 'postgres',  # Replace with your database username
-#         'PASSWORD': 'info@imc',  # Replace with your database password
-#         'HOST': 'localhost',  # For local development, use 'localhost' or '127.0.0.1'
-#         'PORT': '5432',  # Default PostgreSQL port is 5432
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
 #     }
 # }
+
+#https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'chatapirest',  # Replace with your database name
+        'USER': 'postgres',  # Replace with your database username
+        'PASSWORD': 'info@imc',  # Replace with your database password
+        'HOST': 'localhost',  # For local development, use 'localhost' or '127.0.0.1'
+        'PORT': '5432',  # Default PostgreSQL port is 5432
+    }
+}
 
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
