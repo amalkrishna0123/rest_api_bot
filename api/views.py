@@ -38,8 +38,41 @@ import cv2
 import easyocr
 from passporteye import read_mrz
 from pdf2image import convert_from_bytes
+import requests
+# from openai import OpenAI
 
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def deepseek_chat(messages, max_tokens=500, temperature=0.3):
+    headers = {
+        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+
+    response = requests.post(
+        DEEPSEEK_API_URL,
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+
+    response.raise_for_status()
+    data = response.json()
+
+    return data["choices"][0]["message"]["content"]
+
+
+
+client = OpenAI(
+    base_url="https://text.pollinations.ai/openai",
+    api_key="pollinations",  
+)
 
 
 
@@ -210,31 +243,81 @@ def transcribe_audio(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
+# @csrf_exempt
+# def chat_reply(request):
+#     import json
+#     if request.method != "POST":
+#         return JsonResponse({"error": "POST only"}, status=405)
+#     payload = json.loads(request.body.decode("utf-8"))
+#     user_text = payload.get("user_text", "").strip()
+
+#     if not user_text:
+#         return JsonResponse({"error": "user_text required"}, status=400)
+
+#     try:
+#         resp = client.chat.completions.create(
+#             model="openai",
+#             messages=[
+#                 {"role": "system", "content": INSURANCE_ONBOARDING_SYSTEM_PROMPT},
+#                 {"role": "user", "content": user_text}
+#             ],
+#             max_tokens=500,
+
+#         )
+#         reply = resp.choices[0].message.content.strip()
+#         return JsonResponse({"reply": reply})
+#     except Exception as e:
+#         return JsonResponse({"error": str(e)}, status=500)
+
+
 @csrf_exempt
 def chat_reply(request):
     import json
+
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
+
     payload = json.loads(request.body.decode("utf-8"))
+
+    intent = payload.get("intent", "insurance")
     user_text = payload.get("user_text", "").strip()
 
     if not user_text:
         return JsonResponse({"error": "user_text required"}, status=400)
 
+    # Select system prompt based on intent
+    if intent == "insurance":
+        system_prompt = INSURANCE_ONBOARDING_SYSTEM_PROMPT
+
+    elif intent == "details":
+        system_prompt = (
+            "You are a helpful assistant. "
+            "Ask clarifying questions to understand what details the user wants. "
+            "Do not mention insurance unless the user asks."
+        )
+
+    else:  # free
+        system_prompt = (
+            "You are a general AI assistant. "
+            "Answer naturally and detect user intent from the user's question."
+        )
+
     try:
         resp = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="openai",
             messages=[
-                {"role": "system", "content": INSURANCE_ONBOARDING_SYSTEM_PROMPT},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_text}
             ],
             max_tokens=500,
-            temperature=0.0
         )
+
         reply = resp.choices[0].message.content.strip()
         return JsonResponse({"reply": reply})
+
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
 
 
 def extract_from_image(file_path):
@@ -591,7 +674,7 @@ def emirates_id_upload(request):
         if update_fields:
             record.save(update_fields=update_fields)
 
-    # Sync extracted fields into ChatSession
+    # ✅ Sync extracted fields into ChatSession
     if record:
         update_fields = []
 
@@ -634,6 +717,24 @@ def emirates_id_upload(request):
         "occupation", "employer", "issuing_place"
     ]
 
+    # missing = [
+    #     field for field in expected_front + expected_back
+    #     if not getattr(record, field, None)
+    # ]
+    # if record.family_sponsor == "Yes" and not record.family_sponsor_name:
+    #     missing.append("family_sponsor_name")
+
+    # for field in expected_front:
+    #     if not getattr(record, field, None):
+    #         missing.append(field)
+
+    # for field in expected_back:
+    #     if not getattr(record, field, None):
+    #         missing.append(field)
+
+    # if record.family_sponsor == "Yes" and not record.family_sponsor_name:
+    #     missing.append("family_sponsor_name")
+
     missing = [
         field for field in expected_front + expected_back
         if not getattr(record, field, None)
@@ -650,6 +751,7 @@ def emirates_id_upload(request):
         session.step = "complete"
         session.save()
 
+    # ✅ Use the new helper function here
     products, message = compute_products_based_on_data(session, record)
 
     # Normalize issuing place (robust to common OCR errors)
@@ -677,7 +779,8 @@ def emirates_id_upload(request):
     salary_raw = (session.salary or "").lower() if session else ""
     salary_key = None
 
-    
+    # look for the canonical options user should have selected:
+    # "below 4000 AED", "4000 - 5000 AED", "above 5000 AED"
     if "below" in salary_raw and "4000" in salary_raw:
         salary_key = "below_4000"
     elif "4000" in salary_raw and "5000" in salary_raw:
@@ -698,6 +801,7 @@ def emirates_id_upload(request):
         digits = re.findall(r'\d+', salary_raw)
         if digits:
             nums = [int(d) for d in digits]
+            # take median-ish or first number
             n = nums[0]
             if n < 4000:
                 salary_key = "below_4000"
@@ -712,6 +816,7 @@ def emirates_id_upload(request):
 
     if place == "Dubai":
         if salary_key == "below_4000":
+            # single demo product
             products = [
                 {"name": "DHA-Basic", "price": "864.00", "plan": "NLSB"}
             ]
@@ -721,6 +826,7 @@ def emirates_id_upload(request):
                 {"name": "DHA-Basic", "price": "1893.00", "plan": "LSB"}
             ]
         else:
+            # salary unknown — give conservative suggestion
             products = [
                 {"name": "DHA-Basic", "price": "1893.00", "plan": "LSB"}
             ]
@@ -736,6 +842,7 @@ def emirates_id_upload(request):
             message = "Please ensure your salary is above 5000 AED to see available plans for Abu Dhabi."
 
     else:
+        # unknown issuing place -> be conservative
         if salary_key == "above_5000":
             products = [
                 {"name": "General Plan (Eligible)", "price": "999.00 AED", "plan": "Standard"}
@@ -745,8 +852,10 @@ def emirates_id_upload(request):
 
     ask_mobile = not bool(session.mobile)
 
-   
+    # In the emirates_id_upload function, update the product URL generation:
+    # In the emirates_id_upload function, update the product URL generation:
     for p in products:
+        # Ensure URL is always a string and properly formatted
         if "DHA-Basic" in p["name"]:
             if p["plan"] == "NLSB":
                 p["url"] = "https://gia-insurance-provider.com/dha-basic-nlsb"
@@ -763,7 +872,7 @@ def emirates_id_upload(request):
         if not p["url"].startswith(('http://', 'https://')):
             p["url"] = "https://" + p["url"]
 
-    
+    # --- Build response (include new keys) ---
     resp_payload = {
         "ok": True,
         "id": record.id,
@@ -775,6 +884,7 @@ def emirates_id_upload(request):
         },
         "next_step": next_step,
         "files_processed": len(processed_files),
+        # New keys consumed by front-end
         "issuing_place_detected": place,
         "products": products,
         "message": message,
@@ -782,6 +892,9 @@ def emirates_id_upload(request):
     }
 
     return JsonResponse(resp_payload)
+
+
+
 
 
 
@@ -917,58 +1030,66 @@ def insurance_chat(request):
         ]
 
         try:
-            # Call OpenAI
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=messages_for_openai,
+            # ---------- Call DeepSeek ----------
+            reply_content = deepseek_chat(
+                messages=messages_for_openai,  # message format is compatible
                 max_tokens=500,
-                temperature=0.0
             )
-            
-            reply_content = response.choices[0].message.content.strip()
-            
-            # Parse JSON response
+
+            # ---------- Parse JSON response ----------
             try:
                 ai_response = json.loads(reply_content)
             except json.JSONDecodeError:
-                # Fallback to FSM if JSON parsing fails
+                # DeepSeek returned non-JSON, fallback to FSM
+                print("DeepSeek returned invalid JSON, falling back to FSM")
                 return fallback_to_fsm(session, user_text, user)
-            
-            # Extract components from AI response
+
+            # ---------- Extract AI response fields ----------
             reply = ai_response.get("reply", "")
             options = ai_response.get("options", [])
             session_updates = ai_response.get("session_updates", {})
             complete = ai_response.get("complete", False)
-            
-            # Apply session updates
+
+            # ---------- Apply session updates ----------
             for field, value in session_updates.items():
                 if hasattr(session, field):
                     setattr(session, field, value)
-            
-            # Handle completion
+
+            # ---------- Handle completion ----------
             if complete:
                 session.is_completed = True
                 session.step = "complete"
-            
+
             session.save()
-            
+
         except Exception as e:
-            # Fallback to FSM if OpenAI call fails
-            print(f"OpenAI error: {e}, falling back to FSM")
+            # ---------- Hard fallback (DeepSeek error, timeout, network, etc.) ----------
+            print(f"DeepSeek error: {e}, falling back to FSM")
             return fallback_to_fsm(session, user_text, user)
 
         # ---------- Save messages ----------
         if user_text:
-            ChatMessage.objects.create(session=session, role="user", content=user_text)
-        if reply:
-            ChatMessage.objects.create(session=session, role="bot", content=reply)
+            ChatMessage.objects.create(
+                session=session,
+                role="user",
+                content=user_text
+            )
 
+        if reply:
+            ChatMessage.objects.create(
+                session=session,
+                role="bot",
+                content=reply
+            )
+
+        # ---------- Final response ----------
         return JsonResponse({
             "reply": reply,
             "options": options,
             "session_id": session.session_id,
             "step": session.step
         })
+
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
@@ -1079,15 +1200,22 @@ def fallback_to_fsm(session, user_text, user):
         # Free chat mode with original SYSTEM_PROMPT
         try:
             resp = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="openai",
                 messages=[
                     {"role": "system", "content": INSURANCE_ONBOARDING_SYSTEM_PROMPT},
                     {"role": "user", "content": user_text}
                 ],
                 max_tokens=500,
-                temperature=0.0
+
             )
-            reply = resp.choices[0].message.content.strip()
+            # reply = resp.choices[0].message.content.strip()
+            reply = deepseek_chat(
+                messages=[
+                    {"role": "system", "content": INSURANCE_ONBOARDING_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_text},
+                ]
+            )
+
         except Exception as e:
             reply = f"Sorry, I'm having trouble right now. Error: {str(e)}"
 

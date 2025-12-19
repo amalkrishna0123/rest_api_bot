@@ -12,3 +12,5 @@ easyocr
 passporteye
 requests
 mindee
+python-dotenv
+django-dotenv

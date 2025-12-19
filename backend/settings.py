@@ -29,8 +29,11 @@ SECRET_KEY = 'django-insecure-xmbzjvxn3v@9&_q-7^9gt&q49n)q^7h_v5$6p6np0@*l5=kv_6
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['api.keralahome.in']
-
+ALLOWED_HOSTS = [
+    'api.keralahome.in',
+    'localhost',
+    '127.0.0.1'
+]
 
 # Application definition
 
@@ -83,24 +86,24 @@ WSGI_APPLICATION = 'backend.wsgi.application'
 
 # Database
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'chatapirest',  # Replace with your database name
-        'USER': 'postgres',  # Replace with your database username
-        'PASSWORD': 'info@imc',  # Replace with your database password
-        'HOST': 'localhost',  # For local development, use 'localhost' or '127.0.0.1'
-        'PORT': '5432',  # Default PostgreSQL port is 5432
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': 'chatapirest',  # Replace with your database name
+#         'USER': 'postgres',  # Replace with your database username
+#         'PASSWORD': 'info@imc',  # Replace with your database password
+#         'HOST': 'localhost',  # For local development, use 'localhost' or '127.0.0.1'
+#         'PORT': '5432',  # Default PostgreSQL port is 5432
+#     }
+# }
 
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -174,10 +177,10 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-    ]
-    # 'DEFAULT_PERMISSION_CLASSES': [
-    #     'rest_framework.permissions.AllowAny',
-    # ],
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
 }
 
 

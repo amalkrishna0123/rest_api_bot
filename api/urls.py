@@ -16,7 +16,6 @@ urlpatterns = [
     path('auth/chat-history/', views.get_user_chat_history, name='get_chat_history'),
     path("api/save-missing-field/", views.save_missing_field, name="save_missing_field"),
     path("save-mobile/", views.save_mobile, name="save_mobile"),
-    # path("passport/", views.passport_upload, name="passport_upload"),
     path("passport/", views.passport_upload, name="passport_upload"),
     path("uae-visa/", views.uae_visa_upload, name="uae_visa_upload"),
     path("emirates-id-test/", views.emirates_id_upload_test, name="emirates_id_upload_test"),
