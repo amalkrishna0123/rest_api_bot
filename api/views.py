@@ -39,33 +39,29 @@ import easyocr
 from passporteye import read_mrz
 from pdf2image import convert_from_bytes
 import requests
-# from openai import OpenAI
+
+from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.authentication import TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
 
 
-def deepseek_chat(messages, max_tokens=500, temperature=0.3):
-    headers = {
-        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-        "Content-Type": "application/json",
-    }
 
-    payload = {
-        "model": "deepseek-chat",
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-
-    response = requests.post(
-        DEEPSEEK_API_URL,
-        headers=headers,
-        json=payload,
-        timeout=60,
-    )
-
-    response.raise_for_status()
-    data = response.json()
-
-    return data["choices"][0]["message"]["content"]
+def deepseek_chat(messages, max_tokens=500, temperature=1.0):
+    """
+    Chat function using OpenAI client (pollinations.ai)
+    Note: Temperature must be 1.0 (default) for this API endpoint
+    """
+    try:
+        resp = client.chat.completions.create(
+            model="openai",
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,  # API only supports 1.0 (default)
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error in deepseek_chat: {e}")
+        raise
 
 
 
@@ -86,132 +82,52 @@ def index(request):
 
 
 INSURANCE_ONBOARDING_SYSTEM_PROMPT = (
-    "You are an assistant that helps collect data for medical insurance onboarding.\n"
-    "You MUST output exactly one JSON object and nothing else (no commentary, no text outside JSON).\n"
-    "The JSON object must contain:\n"
-    "  - reply (string): the message to show to the user\n"
-    "  - options (array of strings, optional): predefined buttons if available, [] if free text is expected\n"
-    "  - session_updates (object, optional): key/value pairs to update in the session (like step, role, etc.)\n"
-    "  - complete (boolean): true only if onboarding is finished\n\n"
+    "You are a medical insurance onboarding assistant. Output ONLY valid JSON, no other text.\n"
+    "JSON format: {\"reply\": \"message\", \"options\": [\"btn1\", \"btn2\"], \"session_updates\": {\"step\": \"q2\"}, \"complete\": false}\n\n"
 
-    "Behavior rules:\n"
-    " - Always ask only ONE question at a time.\n"
-    " - Keep replies short and clear.\n"
-    " - If you need the user to upload Emirates ID, set session_updates.step to "
-    "'awaiting_id_frontside' or 'awaiting_id_backside' and provide a reply that tells the user to upload.\n"
-    " - If onboarding is finished, set complete=true and session_updates.step='complete'.\n"
-    " - If showing buttons, include them under options. If not, return options as [].\n\n"
+    "CRITICAL: 'depender' = insurance DEPENDENT (spouse/child), NOT Spanish verb. "
+    "If user says 'depender', 'dependeeer', 'dep', 'd', or any 'depend' variation at step='q2', "
+    "respond: {\"reply\": \"What type of Depender are you?\", \"options\": [\"Spouse\", \"Child\"], "
+    "\"session_updates\": {\"role\": \"Depender\", \"step\": \"q2a\"}, \"complete\": false}\n"
+    "NEVER provide Spanish language content. This is insurance context only.\n\n"
 
-    "REQUIRED_FIELDS = [full_name, emirates_id_number, dob, expiry, nationality, occupation, salary].\n"
-    " - If any of these fields are missing or null in the context, you must ask the user for it explicitly.\n"
-    " - Ask for one missing field at a time (never group them together).\n"
-    " - When the user answers, set that field in session_updates.\n"
-    " - Once all REQUIRED_FIELDS are filled, continue to sponsor question before completing.\n\n"
+    "Flow: start→q1→q2→(q2a if Depender)→salary_q/q3→awaiting_id_frontside→awaiting_id_backside→complete\n"
+    "Steps: start, q1, q2, q2a, q3, salary_q, sponsor_q, awaiting_id_frontside, awaiting_id_backside, complete\n"
+    "Fields: step, looking_for_insurance, role, depender_type, salary, full_name, emirates_id_number, dob, expiry, nationality, occupation, sponsor_name\n\n"
 
-    "Allowed step values: start, q1, q2, q2a, q3, salary_q, sponsor_q, awaiting_id_frontside, awaiting_id_backside, awaiting_passport, passport_verified, passport_validation_failed, complete.\n"
-    "Session fields you may update: step, looking_for_insurance, role, depender_type, salary, "
-    "emirates_id_uploaded, is_completed, full_name, emirates_id_number, dob, expiry, nationality, occupation, sponsor_name.\n\n"
-    # "IMPORTANT FLOW: After products are displayed and user selects a product, you must ask for passport upload.\n"
-    # "Set session_updates.step='awaiting_passport' and ask: 'Please upload your passport (front and back pages or PDF with both pages).'\n\n"
+    "Rules:\n"
+    "- One question at a time, short replies\n"
+    "- After salary, ask for Emirates ID upload immediately\n"
+    "- If step='complete' OR emirates_id_uploaded=true, DO NOT ask for Emirates ID upload - onboarding is finished\n"
+    "- If step='complete', acknowledge completion and don't ask for more information\n"
+    "- Ask for missing REQUIRED_FIELDS one at a time\n"
+    "- Set complete=true only when onboarding finished\n\n"
 
-    "### Few-shot examples ###\n\n"
+    "Examples:\n"
+    "Input: {\"context\":{\"step\":\"start\"},\"last_user_message\":\"\"}\n"
+    "Output: {\"reply\": \"Are you looking for medical insurance?\", \"options\": [\"Yes\", \"No\"], \"session_updates\": {\"step\": \"q1\"}, \"complete\": false}\n\n"
 
-    "User input:\n"
-    "{\"context\":{\"step\":\"start\"},\"last_user_message\":\"\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"Are you looking for medical insurance?\",\n"
-    "  \"options\": [\"Yes\", \"No\"],\n"
-    "  \"session_updates\": {\"step\": \"q1\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
+    "Input: {\"context\":{\"step\":\"q1\"},\"last_user_message\":\"Yes\"}\n"
+    "Output: {\"reply\": \"Are you an employee or a depender?\", \"options\": [\"Employee\", \"Depender\"], \"session_updates\": {\"step\": \"q2\"}, \"complete\": false}\n\n"
 
-    "User input:\n"
-    "{\"context\":{\"step\":\"q1\"},\"last_user_message\":\"Yes\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"Are you an employee or a depender?\",\n"
-    "  \"options\": [\"Employee\", \"Depender\"],\n"
-    "  \"session_updates\": {\"looking_for_insurance\": \"Yes\", \"step\": \"q2\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
+    "Input: {\"context\":{\"step\":\"q2\"},\"last_user_message\":\"dependeeer\"}\n"
+    "Output: {\"reply\": \"What type of Depender are you?\", \"options\": [\"Spouse\", \"Child\"], \"session_updates\": {\"role\": \"Depender\", \"step\": \"q2a\"}, \"complete\": false}\n\n"
 
-    "User input:\n"
-    "{\"context\":{\"step\":\"q2\"},\"last_user_message\":\"Employee\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"What is your monthly salary?\",\n"
-    "  \"options\": [\"below 4000 AED\", \"4000 - 5000 AED\", \"above 5000 AED\"],\n"
-    "  \"session_updates\": {\"role\": \"Employee\", \"step\": \"salary_q\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
+    "Input: {\"context\":{\"step\":\"q2a\"},\"last_user_message\":\"Spouse\"}\n"
+    "Output: {\"reply\": \"What is your sponsor's current monthly salary?\", \"options\": [\"below 4000 AED\", \"4000 - 5000 AED\", \"above 5000 AED\"], \"session_updates\": {\"depender_type\": \"Spouse\", \"step\": \"salary_q\"}, \"complete\": false}\n\n"
 
-    "User input:\n"
-    "{\"context\":{\"step\":\"q2\"},\"last_user_message\":\"Depender\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"What type of Depender are you?\",\n"
-    "  \"options\": [\"Spouse\", \"Child\"],\n"
-    "  \"session_updates\": {\"role\": \"Depender\", \"step\": \"q2a\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
+    "Input: {\"context\":{\"step\":\"q2a\"},\"last_user_message\":\"Child\"}\n"
+    "Output: {\"reply\": \"What is your sponsor's current monthly salary?\", \"options\": [\"below 4000 AED\", \"4000 - 5000 AED\", \"above 5000 AED\"], \"session_updates\": {\"depender_type\": \"Child\", \"step\": \"salary_q\"}, \"complete\": false}\n\n"
 
-    "User input:\n"
-    "{\"context\":{\"step\":\"salary_q\"},\"last_user_message\":\"4000-10000 AED\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"Please upload your valid Emirates ID.\",\n"
-    "  \"options\": [],\n"
-    "  \"session_updates\": {\"salary\": \"4000-10000 AED\", \"step\": \"awaiting_id_frontside\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
-
-    "User input:\n"
-    "{\"context\":{\"step\":\"q3\",\"emirates_id_data\":{\"full_name\":\"John Doe\",\"emirates_id_number\":\"784-1234-5678901-2\",\"dob\":\"1990-01-01\",\"expiry\":\"2027-03-15\",\"nationality\":\"India\",\"occupation\":null}},\"last_user_message\":\"Yes, continue\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"I could not find your occupation in the Emirates ID. Could you please tell me your occupation?\",\n"
-    "  \"options\": [],\n"
-    "  \"session_updates\": {\"step\":\"q3\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
-
-    "User input:\n"
-    "{\"context\":{\"step\":\"q3\",\"emirates_id_data\":{\"full_name\":\"John Doe\",\"emirates_id_number\":\"784-1234-5678901-2\",\"dob\":\"1990-01-01\",\"expiry\":\"2027-03-15\",\"nationality\":\"India\",\"occupation\":null}},\"last_user_message\":\"Software Engineer\"}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"Thank you. I've recorded your occupation as Software Engineer. Let's continue.\",\n"
-    "  \"options\": [],\n"
-    "  \"session_updates\": {\"occupation\": \"Software Engineer\", \"step\": \"q4\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
-
-    "User input:\n"
-    "{\"context\":{\"step\":\"sponsor_q\",\"last_user_message\":\"No\"}}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"Thank you. Your onboarding is now complete.\",\n"
-    "  \"options\": [],\n"
-    "  \"session_updates\": {\"step\": \"complete\", \"is_completed\": true},\n"
-    "  \"complete\": true\n"
-    "}\n\n"
-
-    "User input:\n"
-    "{\"context\":{\"step\":\"sponsor_q\",\"last_user_message\":\"Yes\"}}\n"
-    "Assistant output:\n"
-    "{\n"
-    "  \"reply\": \"Please provide your sponsor's name.\",\n"
-    "  \"options\": [],\n"
-    "  \"session_updates\": {\"step\": \"sponsor_q\"},\n"
-    "  \"complete\": false\n"
-    "}\n\n"
-
-    "Now continue following the same format for every step.\n"
+    "Input: {\"context\":{\"step\":\"salary_q\"},\"last_user_message\":\"4000-5000 AED\"}\n"
+    "Output: {\"reply\": \"Please upload your valid Emirates ID (PDF with front and back pages in one file).\", \"options\": [], \"session_updates\": {\"salary\": \"4000-5000 AED\", \"step\": \"awaiting_id_frontside\"}, \"complete\": false}\n"
 )
 
 
 
-@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def transcribe_audio(request):
     if request.method != "POST":
         return JsonResponse({"error": "POST only"}, status=405)
@@ -270,7 +186,9 @@ def transcribe_audio(request):
 #         return JsonResponse({"error": str(e)}, status=500)
 
 
-@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def chat_reply(request):
     import json
 
@@ -282,8 +200,14 @@ def chat_reply(request):
     intent = payload.get("intent", "insurance")
     user_text = payload.get("user_text", "").strip()
 
+    # Allow empty user_text for initialization (createIfMissing scenario)
+    # Return a default greeting message
     if not user_text:
-        return JsonResponse({"error": "user_text required"}, status=400)
+        return JsonResponse({
+            "reply": "Hello! How can I help you today?",
+            "options": [],
+            "session_id": None
+        })
 
     # Select system prompt based on intent
     if intent == "insurance":
@@ -563,8 +487,9 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 import re
 
-@csrf_exempt
-@require_POST
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def emirates_id_upload(request):
     """
     Multi-file front/back upload using OCR.space.
@@ -674,6 +599,37 @@ def emirates_id_upload(request):
         if update_fields:
             record.save(update_fields=update_fields)
 
+    # ✅ Check for duplicate Emirates ID (One insurance per Emirates ID)
+    if record and record.emirates_id:
+        # Check if this Emirates ID already has a completed insurance application
+        existing_completed = EmiratesIDRecord.objects.filter(
+            emirates_id=record.emirates_id
+        ).exclude(
+            id=record.id
+        ).filter(
+            chat_session__is_completed=True
+        ).exists()
+        
+        if existing_completed:
+            # Save decline message to chat
+            decline_message = "This Emirates ID already has an active insurance application. You cannot apply again with the same Emirates ID."
+            ChatMessage.objects.create(
+                session=session,
+                role="bot",
+                content=decline_message
+            )
+            
+            session.is_completed = True
+            session.step = "declined_duplicate"
+            session.save()
+            
+            return JsonResponse({
+                "ok": False,
+                "error": "duplicate_emirates_id",
+                "message": decline_message,
+                "declined": True
+            }, status=200)
+
     # ✅ Sync extracted fields into ChatSession
     if record:
         update_fields = []
@@ -743,12 +699,15 @@ def emirates_id_upload(request):
         missing.append("family_sponsor_name")
 
 
-    # Determine next step
+    # Determine next step - always set to complete after successful upload
     has_back_side = any(f['side'] == 'back' for f in processed_files)
     next_step = "complete" 
 
-    if has_back_side and session.step in ["awaiting_id_frontside", "awaiting_id_backside"]:
+    # Always set step to complete after successful Emirates ID upload
+    # This prevents AI from asking for upload again
+    if session.step in ["awaiting_id_frontside", "awaiting_id_backside", "q3", "salary_q"]:
         session.step = "complete"
+        session.emirates_id_uploaded = True
         session.save()
 
     # ✅ Use the new helper function here
@@ -872,6 +831,42 @@ def emirates_id_upload(request):
         if not p["url"].startswith(('http://', 'https://')):
             p["url"] = "https://" + p["url"]
 
+    # Save user message (Emirates ID uploaded)
+    ChatMessage.objects.create(
+        session=session,
+        role="user",
+        content="Emirates ID uploaded"
+    )
+    
+    # Build bot reply with extracted details and products
+    bot_reply = "Thank you! I've received your Emirates ID."
+    if record:
+        details = []
+        if record.name:
+            details.append(f"Name: {record.name}")
+        if record.emirates_id:
+            details.append(f"Emirates ID: {record.emirates_id}")
+        if record.dob:
+            details.append(f"Date of Birth: {record.dob}")
+        if record.nationality:
+            details.append(f"Nationality: {record.nationality}")
+        if details:
+            bot_reply = bot_reply + "\n\nExtracted details:\n" + "\n".join(details)
+    
+    # Add products or message to bot reply
+    if products and len(products) > 0:
+        product_lines = [f"{i+1}. {p.get('name', 'Product')} — {p.get('price', 'N/A')} ({p.get('plan', 'N/A')})" for i, p in enumerate(products)]
+        bot_reply = bot_reply + "\n\nBased on your information, here are the available products:\n\n" + "\n".join(product_lines)
+    elif message:
+        bot_reply = bot_reply + "\n\n" + message
+    
+    # Save bot message to database
+    ChatMessage.objects.create(
+        session=session,
+        role="bot",
+        content=bot_reply
+    )
+
     # --- Build response (include new keys) ---
     resp_payload = {
         "ok": True,
@@ -905,10 +900,110 @@ import json
 from .models import ChatSession
 
 
-@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def start_insurance_workflow(request):
+    """
+    Auto-start Medical Insurance workflow when user clicks "Medical Insurance" button.
+    Creates a new session and sends the first bot message immediately.
+    """
+    user = request.user if request.user.is_authenticated else None
+    if not user:
+        return JsonResponse({"error": "Authentication required"}, status=401)
+    
+    # Create new session
+    session_id = str(uuid.uuid4())
+    session = ChatSession.objects.create(
+        session_id=session_id,
+        user=user,
+        step="start"
+    )
+    
+    # Prepare context for initial message
+    context = {
+        "step": "start",
+        "last_user_message": ""
+    }
+    
+    messages_for_openai = [
+        {"role": "system", "content": INSURANCE_ONBOARDING_SYSTEM_PROMPT},
+        {"role": "user", "content": json.dumps(context)}
+    ]
+    
+    try:
+        # Get initial bot message
+        reply_content = deepseek_chat(
+            messages=messages_for_openai,
+            max_tokens=500,
+        )
+        
+        # Parse JSON response
+        try:
+            ai_response = json.loads(reply_content)
+        except json.JSONDecodeError:
+            # Fallback to default message
+            ai_response = {
+                "reply": "Are you looking for medical insurance?",
+                "options": ["Yes", "No"],
+                "session_updates": {"step": "q1"},
+                "complete": False
+            }
+        
+        reply = ai_response.get("reply", "Are you looking for medical insurance?")
+        options = ai_response.get("options", ["Yes", "No"])
+        session_updates = ai_response.get("session_updates", {})
+        
+        # Apply session updates
+        for field, value in session_updates.items():
+            if hasattr(session, field):
+                setattr(session, field, value)
+        session.save()
+        
+        # Save initial bot message to database
+        ChatMessage.objects.create(
+            session=session,
+            role="bot",
+            content=reply
+        )
+        
+        return JsonResponse({
+            "reply": reply,
+            "options": options,
+            "session_id": session.session_id,
+            "step": session.step
+        })
+        
+    except Exception as e:
+        print(f"Error starting insurance workflow: {e}")
+        # Fallback response
+        reply = "Are you looking for medical insurance?"
+        options = ["Yes", "No"]
+        session.step = "q1"
+        session.save()
+        
+        ChatMessage.objects.create(
+            session=session,
+            role="bot",
+            content=reply
+        )
+        
+        return JsonResponse({
+            "reply": reply,
+            "options": options,
+            "session_id": session.session_id,
+            "step": session.step
+        })
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def insurance_chat(request):
     """
     Dynamic OpenAI-driven conversational flow for medical-insurance onboarding.
+    GET: fetch chat history for a session
+    POST: handle new message
     """
     # ---------- GET: fetch chat history ----------
     if request.method == "GET":
@@ -936,20 +1031,70 @@ def insurance_chat(request):
             return JsonResponse({"error": "Malformed JSON"}, status=400)
 
         user_text = payload.get("user_text", "").strip()
-        session_id = payload.get("session_id") or str(uuid.uuid4())
+        session_id = payload.get("session_id")
         user = request.user if request.user.is_authenticated else None
 
         # Get or create session
-        try:
-            session = ChatSession.objects.get(session_id=session_id)
-            if user and session.user is None:  # attach user if logged in later
-                session.user = user
-                session.save(update_fields=["user"])
-        except ChatSession.DoesNotExist:
-            session = ChatSession.objects.create(
-                session_id=session_id,
-                user=user
-            )
+        # If session_id is provided, try to get existing session
+        # If not provided or session doesn't exist, create a new one
+        if session_id:
+            try:
+                session = ChatSession.objects.get(session_id=session_id)
+                if user and session.user is None:  # attach user if logged in later
+                    session.user = user
+                    session.save(update_fields=["user"])
+            except ChatSession.DoesNotExist:
+                # Session ID provided but doesn't exist - create new with that ID
+                session = ChatSession.objects.create(
+                    session_id=session_id,
+                    user=user
+                )
+        else:
+            # No session_id provided - create new session
+            # But first check if user has an active session (not completed) to reuse
+            if user:
+                active_session = ChatSession.objects.filter(
+                    user=user,
+                    is_completed=False
+                ).order_by('-created_at').first()
+                
+                if active_session and active_session.step != "complete":
+                    # Reuse existing active session
+                    session = active_session
+                    print(f"♻️ Reusing existing active session: {session.session_id}")
+                else:
+                    # Create new session
+                    session_id = str(uuid.uuid4())
+                    session = ChatSession.objects.create(
+                        session_id=session_id,
+                        user=user
+                    )
+                    print(f"🆕 Created new session: {session.session_id}")
+            else:
+                # No user - create new session
+                session_id = str(uuid.uuid4())
+                session = ChatSession.objects.create(
+                    session_id=session_id,
+                    user=user
+                )
+                print(f"🆕 Created new session (no user): {session.session_id}")
+
+        # Normalize "depender" variations to prevent Spanish verb misinterpretation
+        # This handles typos like "dependeeer", "depender", etc. in insurance context
+        import re
+        user_text_lower = user_text.lower().strip()
+        current_step = session.step or "start"
+        
+        # If we're at step q2 (employee or depender question), normalize any "depend" variation
+        if current_step == "q2":
+            # Match variations: depender, dependeeer, depender, depender, dep, d, dependent, etc.
+            if (re.match(r'^depende*e*r+$', user_text_lower) or 
+                re.match(r'^depend', user_text_lower) or
+                user_text_lower in ['dep', 'd', 'dependent', 'depender', 'depender', 'depender'] or
+                (len(user_text_lower) <= 15 and 'depend' in user_text_lower)):
+                original_text = user_text
+                user_text = "Depender"
+                print(f"✅ Normalized '{original_text}' to 'Depender' (insurance context, step={current_step})")
 
         # Prepare context for OpenAI
         context = {
@@ -959,7 +1104,13 @@ def insurance_chat(request):
             "salary": session.salary,
             "depender_type": session.depender_type,
             "is_completed": session.is_completed,
+            "emirates_id_uploaded": session.emirates_id_uploaded or False,
         }
+        
+        # If step is complete or Emirates ID is already uploaded, don't ask for upload again
+        if session.step == "complete" or session.emirates_id_uploaded:
+            # Override step in context to prevent AI from asking for upload
+            context["step"] = "complete"
 
         # Add Emirates ID data if available
         emirates_id_data = {}
@@ -984,6 +1135,32 @@ def insurance_chat(request):
         
         context["emirates_id_data"] = emirates_id_data
 
+        # Handle product selection FIRST - before any AI processing
+        # Check if this is a product selection message (starts with "Selected:")
+        if user_text and user_text.startswith("Selected:"):
+            # Extract product details from payload if provided
+            product_details = payload.get("product_details")
+            if product_details:
+                # Save user message (product selection)
+                ChatMessage.objects.create(
+                    session=session,
+                    role="user",
+                    content=user_text
+                )
+                # Save bot message (product details)
+                ChatMessage.objects.create(
+                    session=session,
+                    role="bot",
+                    content=product_details
+                )
+                # Return early with product details (no AI processing needed)
+                return JsonResponse({
+                    "reply": product_details,
+                    "options": [],
+                    "session_id": session.session_id,
+                    "step": session.step
+                })
+
         if session.step == "passport_verified":
             try:
                 record = EmiratesIDRecord.objects.filter(chat_session=session).first()
@@ -997,6 +1174,20 @@ def insurance_chat(request):
                 reply = "Based on your Emirates ID and salary, here are the available products:"
                 if message:
                     reply = message
+                
+                # Build full reply with products list for saving to database
+                full_reply = reply
+                if products and len(products) > 0:
+                    product_lines = [f"{i+1}. {p.get('name', 'Product')} — {p.get('price', 'N/A')} ({p.get('plan', 'N/A')})" for i, p in enumerate(products)]
+                    full_reply = reply + "\n\n" + "\n".join(product_lines)
+                
+                # Save bot message with products to database BEFORE returning
+                if full_reply:
+                    ChatMessage.objects.create(
+                        session=session,
+                        role="bot",
+                        content=full_reply
+                    )
                 
                 # If products found, return them
                 if products and len(products) > 0:
@@ -1450,9 +1641,9 @@ from django.core.mail import send_mail
 from .models import User, OTP
 
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def send_otp(request):
     email = request.data.get('email')
     
@@ -1487,9 +1678,9 @@ def send_otp(request):
         return Response({'error': str(e)}, status=500)
 
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@authentication_classes([])
 def verify_otp(request):
     email = request.data.get('email')
     otp_code = request.data.get('otp_code')
@@ -1553,8 +1744,139 @@ def get_user_chat_history(request, session_id=None):
     return Response({'chat_sessions': sessions_data})
 
 
+@api_view(['DELETE', 'POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def clear_all_chat_history(request):
+    """
+    Delete all chat sessions and messages for the authenticated user.
+    """
+    try:
+        user = request.user
+        if not user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+        
+        # Get all chat sessions for this user
+        chat_sessions = ChatSession.objects.filter(user=user)
+        
+        # Count sessions before deletion
+        session_count = chat_sessions.count()
+        
+        # Delete all related chat messages first (CASCADE should handle this, but being explicit)
+        for session in chat_sessions:
+            ChatMessage.objects.filter(session=session).delete()
+        
+        # Delete all chat sessions (this will cascade delete related records)
+        chat_sessions.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Successfully deleted {session_count} chat session(s)',
+            'deleted_count': session_count
+        })
+        
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
-@csrf_exempt
+
+@api_view(['GET'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def get_insurance_details(request):
+    """
+    Get Details flow - Shows all insurance applications for the logged-in user.
+    Returns all completed insurance applications with full details.
+    """
+    user = request.user
+    
+    # Get all completed insurance sessions for this user
+    completed_sessions = ChatSession.objects.filter(
+        user=user,
+        is_completed=True
+    ).exclude(
+        step="declined_duplicate"
+    ).order_by('-created_at')
+    
+    if not completed_sessions.exists():
+        # No insurance applications found
+        message = "You don't have any previous insurance applications."
+        # Save message to a temporary session for display
+        temp_session = ChatSession.objects.filter(user=user).first()
+        if temp_session:
+            ChatMessage.objects.create(
+                session=temp_session,
+                role="bot",
+                content=message
+            )
+        
+        return JsonResponse({
+            "has_insurance": False,
+            "message": message,
+            "applications": []
+        })
+    
+    # Build applications list
+    applications = []
+    for session in completed_sessions:
+        app_data = {
+            "session_id": session.session_id,
+            "created_at": session.created_at.isoformat(),
+            "step": session.step,
+            "role": session.role,
+            "salary": session.salary,
+            "depender_type": session.depender_type,
+            "mobile": session.mobile,
+        }
+        
+        # Get Emirates ID record if exists
+        try:
+            if hasattr(session, 'emirates_id_record'):
+                emr = session.emirates_id_record
+                app_data["emirates_id_details"] = {
+                    "emirates_id": emr.emirates_id,
+                    "name": emr.name,
+                    "dob": emr.dob,
+                    "nationality": emr.nationality,
+                    "gender": emr.gender,
+                    "occupation": emr.occupation,
+                    "issuing_place": emr.issuing_place,
+                    "expiry_date": emr.expiry_date,
+                }
+        except:
+            pass
+        
+        # Get products if available (from session or compute)
+        try:
+            record = EmiratesIDRecord.objects.filter(chat_session=session).first()
+            products, message = compute_products_based_on_data(session, record)
+            app_data["products"] = products or []
+            app_data["product_message"] = message
+        except:
+            app_data["products"] = []
+        
+        applications.append(app_data)
+    
+    # Save display message to database
+    display_message = f"I found {len(applications)} insurance application(s) for you. Here are the details:"
+    if completed_sessions.first():
+        ChatMessage.objects.create(
+            session=completed_sessions.first(),
+            role="bot",
+            content=display_message
+        )
+    
+    return JsonResponse({
+        "has_insurance": True,
+        "message": display_message,
+        "applications": applications,
+        "count": len(applications)
+    })
+
+
+
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def save_mobile(request):
     import json
     from django.http import JsonResponse
@@ -1581,6 +1903,28 @@ def save_mobile(request):
 
     products, message = compute_products_based_on_data(session, record)
 
+    # Save user message (mobile number provided)
+    ChatMessage.objects.create(
+        session=session,
+        role="user",
+        content=f"Mobile number: {mobile}"
+    )
+    
+    # Build bot reply with products
+    bot_reply = f"Thanks! I've updated your mobile number to {mobile}."
+    if products and len(products) > 0:
+        product_lines = [f"{i+1}. {p.get('name', 'Product')} — {p.get('price', 'N/A')} ({p.get('plan', 'N/A')})" for i, p in enumerate(products)]
+        bot_reply = bot_reply + "\n\nBased on your information, here are the available products:\n\n" + "\n".join(product_lines)
+    elif message:
+        bot_reply = bot_reply + "\n\n" + message
+    
+    # Save bot message to database
+    ChatMessage.objects.create(
+        session=session,
+        role="bot",
+        content=bot_reply
+    )
+
     response = {
         "ok": True,
         "message": f"Thanks! I've updated your mobile number to {mobile}.",
@@ -1597,7 +1941,9 @@ from django.views.decorators.csrf import csrf_exempt
 import json
 from .models import EmiratesIDRecord, PassportRecord 
 
-@csrf_exempt
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def save_missing_field(request):
     if request.method != "POST":
         return JsonResponse({"error": "Invalid request"}, status=405)
@@ -1747,9 +2093,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from django.http import JsonResponse
 
-@csrf_exempt
-@api_view(["POST"])
-@permission_classes([AllowAny])
+# @csrf_exempt
+# @api_view(["POST"])
+# @permission_classes([AllowAny])
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def passport_upload(request):
     
     try:
@@ -2045,9 +2394,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from django.http import JsonResponse
 
-@csrf_exempt
-@api_view(["POST"])
-@permission_classes([AllowAny])
+# @csrf_exempt
+# @api_view(["POST"])
+# @permission_classes([AllowAny])
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def uae_visa_upload(request):
     """
     Handles UAE Visa uploads (image/pdf) using OCR.space API.
@@ -2103,9 +2455,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from django.http import JsonResponse
 
-@csrf_exempt
-@api_view(["POST"])
-@permission_classes([AllowAny])
+# @csrf_exempt
+# @api_view(["POST"])
+# @permission_classes([AllowAny])
+@api_view(['POST'])
+@authentication_classes([TokenAuthentication])
+@permission_classes([IsAuthenticated])
 def emirates_id_upload_test(request):
     """
     Global Emirates ID OCR test.

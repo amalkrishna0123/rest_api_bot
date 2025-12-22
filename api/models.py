@@ -154,3 +154,19 @@ class UAEDocumentVisa(models.Model):
 
     def __str__(self):
         return f"UAE Visa ({self.file_number or 'N/A'})"
+    
+
+import secrets
+
+class APIToken(models.Model):
+    name = models.CharField(max_length=100)
+    token = models.CharField(max_length=64, unique=True, db_index=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @staticmethod
+    def generate():
+        return secrets.token_hex(32)
+
+    def __str__(self):
+        return self.name
