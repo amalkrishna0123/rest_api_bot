@@ -2319,9 +2319,12 @@ from django.http import JsonResponse
 # @csrf_exempt
 # @api_view(["POST"])
 # @permission_classes([AllowAny])
+# @api_view(['POST'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
 @api_view(['POST'])
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])   # ⬅️ disable auth
+@permission_classes([AllowAny])
 def passport_upload(request):
     
     try:
@@ -2620,9 +2623,12 @@ from django.http import JsonResponse
 # @csrf_exempt
 # @api_view(["POST"])
 # @permission_classes([AllowAny])
+# @api_view(['POST'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
 @api_view(['POST'])
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])   # ⬅️ disable auth
+@permission_classes([AllowAny])
 def uae_visa_upload(request):
     """
     Handles UAE Visa uploads (image/pdf) using OCR.space API.
@@ -2681,9 +2687,12 @@ from django.http import JsonResponse
 # @csrf_exempt
 # @api_view(["POST"])
 # @permission_classes([AllowAny])
+# @api_view(['POST'])
+# @authentication_classes([TokenAuthentication])
+# @permission_classes([IsAuthenticated])
 @api_view(['POST'])
-@authentication_classes([TokenAuthentication])
-@permission_classes([IsAuthenticated])
+@authentication_classes([])   # ⬅️ disable auth
+@permission_classes([AllowAny])
 def emirates_id_upload_test(request):
     """
     Global Emirates ID OCR test.
