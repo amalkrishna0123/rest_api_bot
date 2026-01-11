@@ -198,3 +198,7 @@ REST_FRAMEWORK = {
 
 SESSION_COOKIE_AGE = 86400  # 24 hours in seconds
 SESSION_SAVE_EVERY_REQUEST = True
+
+# PaddleOCR is now used for PDF processing (FREE, on your own server)
+# No external dependencies like poppler needed
+# Required packages: pip install pymupdf paddlepaddle paddleocr

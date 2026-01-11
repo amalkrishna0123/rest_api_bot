@@ -11,7 +11,7 @@ import pdfplumber
 import openpyxl
 import tempfile
 from django.views.decorators.http import require_POST
-from pdf2image import convert_from_path
+# pdf2image removed - using PaddleOCR instead
 from .models import ChatSession, EmiratesIDRecord, PassportRecord
 import uuid
 
@@ -37,7 +37,7 @@ import numpy as np
 import cv2
 import easyocr
 from passporteye import read_mrz
-from pdf2image import convert_from_bytes
+# pdf2image removed - using PaddleOCR instead
 import requests
 
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
@@ -263,8 +263,7 @@ def extract_from_image(file_path):
 
 def extract_from_pdf(file_path):
     """
-    Try direct text extraction with pdfplumber. If nothing found, render high-DPI images
-    and OCR them using pytesseract (with English+Arabic if available).
+    Try direct text extraction with pdfplumber. If nothing found, use PaddleOCR.
     """
     text = ""
     try:
@@ -277,20 +276,19 @@ def extract_from_pdf(file_path):
     except Exception as e:
         text += f"[pdfplumber error: {e}]\n"
 
-    # Fallback to OCR if no text found
+    # Fallback to PaddleOCR if no text found
     if not text.strip():
         try:
-            pages = convert_from_path(
-                file_path,
-                dpi=300,
-                poppler_path=r"C:\Users\GL_Amal\Downloads\Release-25.07.0-0\poppler-25.07.0\Library\bin"
-            )
-            for page_img in pages:
-                try:
-                    # prefer english+arabic if available
-                    text += pytesseract.image_to_string(page_img, lang='eng+ara') + "\n"
-                except Exception:
-                    text += pytesseract.image_to_string(page_img) + "\n"
+            import os
+            from .ocr_space import paddle_ocr_file
+            from django.core.files import File
+            with open(file_path, 'rb') as f:
+                file_obj = File(f, name=os.path.basename(file_path))
+                ocr_text, code, err = paddle_ocr_file(file_obj, is_pdf=True)
+                if code == 0:
+                    text = ocr_text
+                else:
+                    text += f"[PaddleOCR error: {err}]\n"
         except Exception as e:
             text += f"[OCR error: {e}]"
 
@@ -330,12 +328,47 @@ def parse_fields(text):
     if m:
         data['emirates_id'] = m.group(0).strip()
 
-    # 2) Labeled name
-    m = re.search(r'(?i)(?:Name|NAME|الاسم|اسم)\s*[:\-]?\s*([^\n\r]{2,80})', raw)
-    if m:
-        name_val = m.group(1).strip()
-        name_val = re.sub(r'[\:\-\/\|]+$', '', name_val).strip()
-        data['name'] = name_val
+    # 2) Labeled name - improved extraction with strict validation
+    # Try multiple patterns to catch name in different formats
+    name_patterns = [
+        # Pattern 1: Name: James Edward Clough (proper name format with capitals)
+        r'(?i)Name\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',
+        # Pattern 2: Name: followed by text until newline or next field (but not including "Name" word)
+        r'(?i)Name\s*[:\-]?\s*([A-Z][^\n\r]{1,60}?)(?:\s+Name\s*$|\n|Occupation|Date|Nationality|Expiry|Issuing|Sex|Gender|$)',
+        # Pattern 3: Arabic name label
+        r'(?i)(?:الاسم|اسم)\s*[:\-]?\s*([^\n\r]{2,80})',
+    ]
+    
+    # List of terms that should NEVER be extracted as name
+    invalid_name_terms = [
+        'property owner', 'occupation', 'employer', 'sponsor', 'investors',
+        'entrepreneurs', 'specialized', 'file', 'number', 'date', 'expiry',
+        'issuing', 'nationality', 'gender', 'sex', 'male', 'female'
+    ]
+    
+    for pattern in name_patterns:
+        m = re.search(pattern, raw)
+        if m:
+            name_val = m.group(1).strip()
+            # Remove trailing "Name" label if it was captured
+            name_val = re.sub(r'\s+Name\s*$', '', name_val, flags=re.IGNORECASE).strip()
+            # Clean up common OCR artifacts
+            name_val = re.sub(r'[\:\-\/\|]+$', '', name_val).strip()
+            # Stop if we hit common field names (occupation, date, etc.)
+            name_val = re.split(r'(?i)\s+(?:Occupation|Date|Nationality|Expiry|Issuing|Sex|Gender|Employer|Name\s*$)', name_val)[0].strip()
+            
+            # STRICT VALIDATION: Reject if it contains occupation-related terms
+            name_lower = name_val.lower()
+            if any(term in name_lower for term in invalid_name_terms):
+                continue  # Skip this match, try next pattern
+            
+            # Additional validation
+            if not re.search(r'\d{4,}', name_val):  # Don't use if it has long number sequences
+                if len(name_val.split()) >= 2:  # Name should have at least 2 words
+                    # Ensure it looks like a proper name (has capital letters)
+                    if re.search(r'[A-Z][a-z]', name_val):
+                        data['name'] = name_val
+                        break
 
     # 3) Fallback name detection if not found
     if 'name' not in data:
@@ -347,6 +380,9 @@ def parse_fields(text):
                 continue
             if any(ch.isdigit() for ch in line):
                 continue
+            # Skip common occupation/employer terms
+            if any(term in low for term in ['property owner', 'occupation', 'employer', 'sponsor']):
+                continue
             if len(line.split()) >= 2 and len(line) > 3:
                 if 'united arab emirates' in low or 'arab emirates' in low:
                     continue
@@ -355,12 +391,61 @@ def parse_fields(text):
                     nxt = lines[idx + 1]
                     if (not any(sw in nxt.lower() for sw in stopwords)
                         and not any(ch.isdigit() for ch in nxt)
-                        and len(nxt.split()) <= 3):
+                        and len(nxt.split()) <= 3
+                        and 'occupation' not in nxt.lower()
+                        and 'employer' not in nxt.lower()):
                         name_candidate = name_candidate + ' ' + nxt
                 candidate = name_candidate
                 break
         if candidate:
             data['name'] = candidate
+    
+    # 4) Post-process name to ensure it's not occupation or other field
+    # This validation happens AFTER all fields are extracted
+    invalid_name_terms = ['property owner', 'occupation', 'owner', 'employer', 'sponsor']
+    
+    if 'name' in data:
+        name_lower = data['name'].lower()
+        # If name contains invalid terms, clear it and try to find the real name
+        if any(term in name_lower for term in invalid_name_terms):
+            # Clear the invalid name
+            data.pop('name', None)
+            
+            # Try to find name by looking for pattern: Name: [Proper Name]
+            # Look for lines that have "Name:" followed by a proper name format
+            lines = [l.strip() for l in normalized.splitlines() if l.strip()]
+            for idx, line in enumerate(lines):
+                if re.search(r'(?i)^Name\s*[:\-]', line):
+                    # Found a Name: line, extract the name part
+                    name_match = re.search(r'(?i)Name\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)', line)
+                    if name_match:
+                        potential_name = name_match.group(1).strip()
+                        # Validate it's not an occupation term
+                        if not any(term in potential_name.lower() for term in invalid_name_terms):
+                            data['name'] = potential_name
+                            break
+                    
+                    # If not found in same line, check next line
+                    if idx + 1 < len(lines):
+                        next_line = lines[idx + 1].strip()
+                        # Check if next line looks like a name (capitalized words, no occupation terms)
+                        if (re.search(r'^[A-Z][a-z]+', next_line) and 
+                            not any(term in next_line.lower() for term in invalid_name_terms) and
+                            len(next_line.split()) >= 2):
+                            data['name'] = next_line
+                            break
+    
+    # Final check: if we have both name and occupation, ensure they're not swapped
+    if 'name' in data and 'occupation' in data:
+        name_lower = data['name'].lower()
+        occ_lower = data['occupation'].lower()
+        
+        # If name looks like occupation and occupation looks like a name, swap them
+        if (any(term in name_lower for term in invalid_name_terms) and
+            not any(term in occ_lower for term in invalid_name_terms) and
+            re.search(r'[A-Z][a-z]', data['occupation'])):
+            # Swap them
+            data['name'], data['occupation'] = data['occupation'], data['name']
 
     # 4) Dates
     date_pattern = r'(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4})'
@@ -413,12 +498,12 @@ def parse_fields(text):
         if len(all_dates) >= 2:
             data["issuing_date"] = format_date(all_dates[1])
 
-    # 5) Nationality
+    # 6) Nationality
     m = re.search(r'(?i)(?:Nationality|الجنسية)\s*[:\-]?\s*([^\n\r]{2,80})', raw)
     if m:
         data['nationality'] = m.group(1).strip()
 
-    # 6) Sex / Gender
+    # 7) Sex / Gender
     gender_patterns = [
         r'(?i)(?:Sex|Gender|الجنس)\s*[:\-]?\s*(Male|Female|M|F|ذكر|أنثى)',
         r'(?i)(?:Sex|Gender|الجنس)\s*[:\-]?\s*([^\n]{1,20})',
@@ -448,7 +533,7 @@ def parse_fields(text):
             data["sex"] = gender_val
 
 
-    # 7) Address
+    # 8) Address
     m = re.search(r'(?i)(?:Address|العنوان)\s*[:\-]?\s*([^\n\r]{2,140})', raw)
     if m:
         data['address'] = m.group(1).strip()
@@ -476,7 +561,16 @@ def parse_fields(text):
 
     for k, v in list(data.items()):
         if isinstance(v, str):
-            data[k] = v.strip().rstrip(':').strip()
+            v = v.strip().rstrip(':').strip()
+            # Special cleanup for name field
+            if k == 'name':
+                # Remove trailing "Name" label if present
+                v = re.sub(r'\s+Name\s*$', '', v, flags=re.IGNORECASE).strip()
+                # Normalize all-caps names to proper case (JAMES EDWARD -> James Edward)
+                if v.isupper() and len(v.split()) > 1:
+                    # Convert to title case but preserve structure
+                    v = v.title()
+            data[k] = v
 
     return data
 
@@ -497,7 +591,7 @@ def emirates_id_upload(request):
     merges extracted data into one EmiratesIDRecord,
     and syncs extracted fields with ChatSession.
     """
-    from .ocr_space import ocr_space_file_multi_lang, detect_document_side
+    from .ocr_space import ocr_space_file_multi_lang, detect_document_side, process_pdf_page_by_page
 
     session_id = request.POST.get("session_id")
     if not session_id:
@@ -518,24 +612,91 @@ def emirates_id_upload(request):
     for file_obj in files:
         is_pdf = file_obj.name.lower().endswith(".pdf")
 
-        # Use the improved multi-language OCR function
-        text, code, err = ocr_space_file_multi_lang(file_obj, is_pdf)
-        if code != 0:
-            return JsonResponse({"error": f"OCR.space failed for {file_obj.name}: {err}"}, status=500)
+        if is_pdf:
+            # For PDFs, process page-by-page to identify Emirates ID pages dynamically
+            page_data_list = process_pdf_page_by_page(file_obj)
+            
+            if not page_data_list:
+                # Fallback to full PDF processing if page-by-page fails
+                text, code, err = ocr_space_file_multi_lang(file_obj, is_pdf)
+                if code != 0:
+                    return JsonResponse({"error": f"OCR.space failed for {file_obj.name}: {err}"}, status=500)
+                
+                side = detect_document_side(text)
+                processed_files.append({
+                    'name': file_obj.name,
+                    'text': text,
+                    'side': side,
+                    'is_pdf': is_pdf
+                })
+            else:
+                # Filter to only Emirates ID pages - POSITION INDEPENDENT
+                # Scans ALL pages and identifies Emirates ID pages based on content only
+                emirates_id_pages = [p for p in page_data_list if p.get('is_emirates_id', True)]
+                
+                # If no pages were identified as Emirates ID, use relaxed detection
+                if not emirates_id_pages:
+                    # Fallback: Look for pages with ANY Emirates ID indicators (relaxed criteria)
+                    from .ocr_space import _is_emirates_id_page
+                    for page_data in page_data_list:
+                        text = page_data.get('text', '')
+                        if text:
+                            text_lower = text.lower()
+                            # Check for any Emirates ID indicators (relaxed check)
+                            has_indicators = any(indicator in text_lower for indicator in [
+                                'emirates id', 'identity card', 'بطاقة الهوية',
+                                'nationality', 'الجنسية', 'occupation', 'المهنة',
+                                'employer', 'صاحب العمل', 'date of birth', 'تاريخ الميلاد'
+                            ])
+                            # Also check for Emirates ID number pattern
+                            import re
+                            has_id_number = bool(re.search(r'\b\d{3}-\d{4}-\d{7}-\d\b', text))
+                            
+                            if has_indicators or has_id_number:
+                                # Re-evaluate with relaxed criteria
+                                page_data['is_emirates_id'] = True
+                                emirates_id_pages.append(page_data)
+                
+                # Final fallback: If still no pages found and it's a 2-page PDF, use all pages
+                if not emirates_id_pages and len(page_data_list) <= 2:
+                    emirates_id_pages = page_data_list
+                
+                # Add each Emirates ID page as a separate processed file
+                # Pages are processed in order, so front/back detection will work correctly
+                for page_data in emirates_id_pages:
+                    processed_files.append({
+                        'name': f"{file_obj.name} - Page {page_data['page_number']}",
+                        'text': page_data['text'],
+                        'side': page_data['side'],
+                        'is_pdf': is_pdf,
+                        'page_number': page_data['page_number']
+                    })
+        else:
+            # For images, use the standard processing
+            text, code, err = ocr_space_file_multi_lang(file_obj, is_pdf)
+            if code != 0:
+                return JsonResponse({"error": f"OCR.space failed for {file_obj.name}: {err}"}, status=500)
 
-        # Detect document side
-        side = detect_document_side(text)
+            # Detect document side
+            side = detect_document_side(text)
 
-        processed_files.append({
-            'name': file_obj.name,
-            'text': text,
-            'side': side,
-            'is_pdf': is_pdf
-        })
+            processed_files.append({
+                'name': file_obj.name,
+                'text': text,
+                'side': side,
+                'is_pdf': is_pdf
+            })
 
     # Separate front and back side text
-    front_texts = [f['text'] for f in processed_files if f['side'] in ['front', 'unknown']]
+    # Prioritize pages identified as front/back, but include unknown if needed
+    front_texts = [f['text'] for f in processed_files if f['side'] == 'front']
     back_texts = [f['text'] for f in processed_files if f['side'] == 'back']
+    
+    # If no clear front/back detected, use all text
+    if not front_texts and not back_texts:
+        all_texts = [f['text'] for f in processed_files]
+        front_texts = all_texts[:1] if all_texts else []
+        back_texts = all_texts[1:] if len(all_texts) > 1 else []
 
     # Combine texts
     front_combined = " ".join(front_texts) if front_texts else ""
@@ -548,8 +709,48 @@ def emirates_id_upload(request):
         back_combined = ""
 
     # Parse fields from combined text
+    # IMPORTANT: Parse front and back separately to avoid field mixing
     front_data = parse_fields(front_combined)
     back_data = parse_back_side_fields(back_combined)
+    
+    # Additional validation: Ensure name is extracted from front side only
+    # Name should never come from back side (which has occupation, employer, etc.)
+    if not front_data.get('name') and back_data.get('name'):
+        # If name was extracted from back side, it's likely wrong - clear it
+        back_data.pop('name', None)
+    
+    # If name is still missing or invalid, try to extract from front text more carefully
+    current_name = front_data.get('name', '')
+    if (not current_name or 
+        any(term in current_name.lower() for term in ['property', 'owner', 'occupation', 'employer', 'sponsor'])):
+        # Clear invalid name
+        if current_name:
+            front_data.pop('name', None)
+        
+        # Look for the exact pattern: "Name: [Proper Name]" in front text only
+        if front_combined:
+            # Try multiple patterns to find the real name
+            name_patterns = [
+                r'(?i)Name\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',  # Name: James Edward Clough
+                r'(?i)Name\s*[:\-]?\s*([A-Z][^\n]{1,50}?)(?:\n|Occupation|Date|Nationality)',  # Until next field
+            ]
+            
+            for pattern in name_patterns:
+                name_match = re.search(pattern, front_combined)
+                if name_match:
+                    potential_name = name_match.group(1).strip()
+                    # Remove trailing "Name" label if captured
+                    potential_name = re.sub(r'\s+Name\s*$', '', potential_name, flags=re.IGNORECASE).strip()
+                    # Clean up
+                    potential_name = re.sub(r'[\:\-\/\|]+$', '', potential_name).strip()
+                    # Remove any trailing "Name" word
+                    potential_name = re.sub(r'\s+Name$', '', potential_name, flags=re.IGNORECASE).strip()
+                    # Validate it's a real name, not occupation
+                    if (not any(term in potential_name.lower() for term in ['property', 'owner', 'occupation', 'employer', 'sponsor']) and
+                        len(potential_name.split()) >= 2 and
+                        re.search(r'[A-Z][a-z]', potential_name)):
+                        front_data['name'] = potential_name
+                        break
 
     # Handle family sponsor follow-up
     family_sponsor_name = None
@@ -1544,48 +1745,70 @@ def parse_back_side_fields(text):
     data = {}
     raw = text or ""
     
-    # Occupation
+    # Occupation - improved extraction
     occupation_patterns = [
+        r'(?i)Occupation\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)',  # Occupation: Property Owner
         r'(?i)(?:Occupation|المهنة|Profession|الوظيفة)\s*[:\-]?\s*([^\n\r]{2,80})',
-        r'(?i)(?:Occupation|المهنة|Profession|الوظيفة)[\s\S]{1,100}?([^\n\r]{2,80})(?=\n|$)'
+        r'(?i)Occupation\s*[:\-]?\s*([^\n\r]{1,60}?)(?:\n|Employer|Issuing|Family|$)',  # Stop at next field
     ]
     for pattern in occupation_patterns:
         m = re.search(pattern, raw)
         if m:
             occupation = m.group(1).strip()
-            # Clean up common OCR artifacts
-            occupation = re.sub(r'[^\w\s\-]', '', occupation)
-            if len(occupation) > 1:
-                data['occupation'] = occupation
-                break
+            # Clean up common OCR artifacts but preserve spaces and capitalization
+            occupation = re.sub(r'[^\w\s\-\.,]', '', occupation)  # Keep letters, numbers, spaces, hyphens, periods, commas
+            # Remove leading/trailing special chars
+            occupation = re.sub(r'^[\:\-\/\|]+|[\:\-\/\|]+$', '', occupation).strip()
+            # Stop if we hit next field indicators
+            occupation = re.split(r'(?i)\s+(?:Employer|Issuing|Family|صاحب)', occupation)[0].strip()
+            # Filter out obvious OCR garbage (long number sequences, random characters)
+            if not re.search(r'\d{6,}', occupation):  # Don't use if it has long number sequences
+                if len(occupation) > 1 and len(occupation.split()) <= 5:  # Reasonable length
+                    data['occupation'] = occupation
+                    break
     
-    # Employer
+    # Employer - improved extraction
     employer_patterns = [
+        r'(?i)Employer\s*[:\-]?\s*([A-Z][^\n\r]{1,80}?)(?:\n|Issuing|Family|$)',  # Employer: ... until next field
         r'(?i)(?:Employer|صاحب العمل|Company|الشركة|جهة العمل)\s*[:\-]?\s*([^\n\r]{2,80})',
-        r'(?i)(?:Employer|صاحب العمل|Company|الشركة|جهة العمل)[\s\S]{1,100}?([^\n\r]{2,80})(?=\n|$)'
+        r'(?i)Employer\s*[:\-]?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z,]+)+)',  # Capitalized words pattern
     ]
     for pattern in employer_patterns:
         m = re.search(pattern, raw)
         if m:
             employer = m.group(1).strip()
-            employer = re.sub(r'[^\w\s\-]', '', employer)
+            # Clean up but preserve commas and capitalization
+            employer = re.sub(r'[^\w\s\-\.,]', '', employer)
+            # Remove leading/trailing special chars
+            employer = re.sub(r'^[\:\-\/\|]+|[\:\-\/\|]+$', '', employer).strip()
+            # Stop if we hit next field
+            employer = re.split(r'(?i)\s+(?:Issuing|Family|مكان)', employer)[0].strip()
+            # Preserve commas in employer names (e.g., "Investors, Entrepreneurs, Specialized")
             if len(employer) > 1:
                 data['employer'] = employer
                 break
     
-    # Issuing Place
+    # Issuing Place - improved extraction
     issuing_place_patterns = [
-        r'(?i)(?:Issuing Place|مكان الإصدار|Place of Issue|جهة الإصدار)\s*[:\-]?\s*([^\n\r]{2,80})',
-        r'(?i)(?:Issuing Place|مكان الإصدار|Place of Issue|جهة الإصدار)[\s\S]{1,100}?([^\n\r]{2,80})(?=\n|$)'
+        r'(?i)Issuing Place\s*[:\-]?\s*([A-Z][a-z]+)',  # Issuing Place: Dubai
+        r'(?i)(?:Issuing Place|مكان الإصدار|Place of Issue|جهة الإصدار)\s*[:\-]?\s*([^\n\r]{2,40})',
+        r'(?i)Issuing Place\s*[:\-]?\s*([^\n\r]{1,40}?)(?:\n|If you find|Family|$)',  # Stop at next section
     ]
     for pattern in issuing_place_patterns:
         m = re.search(pattern, raw)
         if m:
             issuing_place = m.group(1).strip()
-            issuing_place = re.sub(r'[^\w\s\-]', '', issuing_place)
-            if len(issuing_place) > 1:
-                data['issuing_place'] = issuing_place
-                break
+            # Clean up but preserve city names
+            issuing_place = re.sub(r'[^\w\s\-\.,]', '', issuing_place)
+            # Remove leading/trailing special chars
+            issuing_place = re.sub(r'^[\:\-\/\|]+|[\:\-\/\|]+$', '', issuing_place).strip()
+            # Stop if we hit next section
+            issuing_place = re.split(r'(?i)\s+(?:If you find|Family|على هذه)', issuing_place)[0].strip()
+            # Filter out common OCR errors
+            if issuing_place.lower() not in ['file', 'number', 'num', 'no', 'yes']:
+                if len(issuing_place) > 1 and len(issuing_place.split()) <= 3:  # City names are usually 1-3 words
+                    data['issuing_place'] = issuing_place
+                    break
     
     # Family Sponsor (Yes/No)
     family_sponsor_patterns = [

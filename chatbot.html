@@ -1,0 +1,4752 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Medical Insurance Assistant</title>
+    <!-- Prevent welcome screen flash when chatId exists in URL -->
+    <script>
+        // Run immediately to prevent flash of welcome screen
+        (function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const chatId = urlParams.get('chatId');
+            if (chatId) {
+                // Add class to html element to indicate chatId exists
+                document.documentElement.classList.add('has-chat-id');
+                // Add inline style to hide landing immediately
+                const style = document.createElement('style');
+                style.textContent = '#landing-wrapper { display: none !important; } .chat-container { display: flex !important; }';
+                document.head.appendChild(style);
+            }
+        })();
+    </script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.6.0/remixicon.css"
+        integrity="sha512-kJlvECunwXftkPwyvHbclArO8wszgBGisiLeuDFwNM8ws+wKIw0sv1os3ClWZOcrEB2eRXULYUsm8OVRGJKwGA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"
+        integrity="sha512-7eHRwcbYkK4d9g/6tD/mhkf++eoTHwpNM9woBxtPUBWm67zeAfFC+HrdoE2GanKeocly/VxeLvIqwvCdk7qScg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+    <style>
+        /* Reset and base styles */
+        * {
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(to bottom, #ffffff, #ffffff, #c5c5c5);
+            overflow-x: hidden;
+        }
+
+        :root {
+            --primary-gold: #B99A4F;
+            --primary-blue: #1d375f;
+            --light-blue: #3b82f6;
+            --light-purple: #8b5cf6;
+            --light-gray: #f3f4f6;
+            --medium-gray: #e5e7eb;
+            --dark-gray: #6b7280;
+            --white: #ffffff;
+            --black: #1f2937;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        /* body {
+            background: linear-gradient(to bottom right, #f8fafc, #dbeafe);
+            height: 100vh;
+            overflow: hidden;
+        } */
+
+        /* Chat container */
+        .chat-container {
+            max-width: 900px;
+            width: 100%;
+            height: 95vh;
+            margin: 2.5vh auto;
+            /* background-color: var(--white); */
+            /* box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); */
+            /* border-radius: 1.5rem; */
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding-top: 20px;
+        }
+
+        /* Header */
+        .chat-header {
+            padding: 0.75rem 1.5rem;
+            border-radius: 20px 20px 0px 0px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: linear-gradient(to right, var(--primary-gold), var(--primary-blue));
+            color: var(--white);
+            position: relative;
+            z-index: 10;
+        }
+
+        .header-left h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .header-left p {
+            font-size: 0.875rem;
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        .header-right {
+            font-size: 1.5rem;
+        }
+
+        /* Messages area */
+        .messages-area {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            /* background-color: var(--light-gray); */
+            position: relative;
+            z-index: 20;
+        }
+
+        .message {
+            margin-bottom: 0.5rem;
+            display: flex;
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.bot {
+            justify-content: flex-start;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 0.875rem;
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .message.user .message-bubble {
+            background: linear-gradient(to right, var(--light-gray), var(--white));
+            color: var(--black);
+            border: 1px solid var(--white);
+            margin-left: auto;
+        }
+
+        .message.bot .message-bubble {
+            background: linear-gradient(to right, var(--primary-gold), var(--primary-blue));
+            color: var(--white);
+            border: 1px solid var(--white);
+            margin-right: auto;
+        }
+
+        .message-bubble a {
+            color: #93c5fd;
+            text-decoration: underline;
+        }
+
+        .message-bubble a:hover {
+            color: #bfdbfe;
+        }
+
+        /* Options */
+        .options-container {
+            margin-top: 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .option-button {
+            padding: 0.5rem 1rem;
+            background-color: var(--white);
+            border: 1px solid var(--medium-gray);
+            color: var(--dark-gray);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .option-button:hover {
+            background-color: #eff6ff;
+            border-color: var(--light-blue);
+            transform: scale(1.05);
+        }
+
+        .option-button:active {
+            transform: scale(0.95);
+        }
+
+        /* Products */
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .product-card {
+            position: relative;
+            overflow: hidden;
+            border-radius: 0.75rem;
+            background: linear-gradient(to bottom right, var(--primary-gold), #8B7355, var(--primary-blue));
+            padding: 1px;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .product-card:hover {
+            transform: scale(1.02);
+        }
+
+        .product-card-content {
+            position: relative;
+            background: #f4f2f2;
+            backdrop-filter: blur(10px);
+            border-radius: 0.75rem;
+            padding: 1rem;
+        }
+
+        .product-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .product-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 0.5rem;
+            background: linear-gradient(to bottom right, var(--primary-gold), var(--primary-blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            flex-shrink: 0;
+        }
+
+        .product-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .product-name {
+            font-size: 1rem;
+            font-weight: bold;
+            color: var(--primary-blue);
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .product-plan {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .product-plan-check {
+            width: 0.75rem;
+            height: 0.75rem;
+            color: var(--primary-gold);
+            flex-shrink: 0;
+        }
+
+        .product-plan-text {
+            font-size: 0.75rem;
+            color: var(--dark-gray);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .product-price {
+            background: linear-gradient(to right, var(--primary-gold), var(--primary-blue));
+            padding: 0.375rem 0.75rem;
+            border-radius: 0.5rem;
+            color: var(--white);
+            font-size: 0.875rem;
+            font-weight: bold;
+            white-space: nowrap;
+        }
+
+        .product-hint {
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .product-hint-text {
+            font-size: 0.75rem;
+            color: var(--dark-gray);
+            background-color: var(--medium-gray);
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+        }
+
+        .product-divider {
+            margin-top: 0.75rem;
+            height: 0.125rem;
+            background: linear-gradient(to right, var(--primary-gold), #8B7355, var(--primary-blue));
+            border-radius: 0.125rem;
+            opacity: 0.5;
+        }
+
+        .product-card:hover .product-divider {
+            opacity: 1;
+        }
+
+        /* Input area */
+        .input-area {
+            padding: 1rem;
+            background-color: #ffffff57;
+            border: 1px solid #ffffff;
+            position: relative;
+            overflow: visible;
+            border-radius: 10px;
+        }
+
+        .input-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            position: relative;
+        }
+
+        .input-button {
+            padding: 0.5rem;
+            border-radius: 0.75rem;
+            transition: all 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .input-button:not(.disabled):hover {
+            transform: scale(1.1);
+        }
+
+        .input-button:not(.disabled):active {
+            transform: scale(0.9);
+        }
+
+        .input-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .file-button {
+            /* background: linear-gradient(to right, var(--light-blue), var(--light-purple)); */
+            background-color: #f3f4f6;
+            color: #6b7280;
+            border: none;
+        }
+
+        .file-button:hover {
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+        }
+
+        .voice-button {
+            background-color: var(--light-gray);
+            color: var(--dark-gray);
+            border: none;
+        }
+
+        .voice-button:hover {
+            background-color: var(--medium-gray);
+        }
+
+        .voice-button.recording {
+            background-color: var(--error);
+            color: var(--white);
+            animation: pulse 1.5s infinite;
+        }
+
+        .send-button {
+            background: linear-gradient(to right, var(--primary-gold), var(--primary-blue));
+            color: var(--white);
+            border: none;
+        }
+
+        .send-button:hover {
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+        }
+
+        .send-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .input-field {
+            flex: 1;
+            border: none;
+            outline: none;
+        }
+
+        .mobile-input-container {
+            width: 100%;
+        }
+
+        .mobile-input-error {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background-color: #fef2f2;
+            border: 2px solid var(--error);
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            color: var(--error);
+            font-weight: 500;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            z-index: 9999;
+            white-space: nowrap;
+        }
+
+        .mobile-input-error::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 1rem;
+            border: 4px solid transparent;
+            border-top-color: var(--error);
+        }
+
+        .mobile-input-helper {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 0.5rem;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            color: var(--dark-gray);
+            background-color: var(--light-gray);
+            border-radius: 0.25rem;
+            border: 1px solid var(--medium-gray);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            z-index: 50;
+        }
+
+        .mobile-input-wrapper {
+            display: flex;
+            align-items: center;
+            border: 1px solid var(--medium-gray);
+            border-radius: 0.75rem;
+            background-color: var(--white);
+            transition: all 0.2s;
+        }
+
+        .mobile-input-wrapper:focus-within {
+            border-color: var(--light-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .mobile-flag {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.75rem;
+            border-right: 1px solid var(--medium-gray);
+            background-color: var(--light-gray);
+            font-size: 1.25rem;
+        }
+
+        .mobile-prefix {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            border-right: 1px solid var(--medium-gray);
+            background-color: var(--light-gray);
+            color: var(--dark-gray);
+            font-weight: 600;
+            font-size: 0.875rem;
+            user-select: none;
+        }
+
+        .mobile-input {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: 0.875rem;
+        }
+
+        .text-input {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            font-size: 0.875rem;
+            resize: none;
+            min-height: 3rem;
+            max-height: 6.875rem;
+            transition: all 0.2s;
+            border: none;
+            outline: none;
+            /* background-color: var(--white); */
+        }
+
+        .text-input:focus {
+            border-color: var(--light-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Status indicators */
+        .status-indicator {
+            margin-top: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--dark-gray);
+        }
+
+        .status-dot {
+            width: 0.5rem;
+            height: 0.5rem;
+            background-color: var(--error);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem;
+        }
+
+        .typing-dots {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .typing-dot {
+            width: 0.5rem;
+            height: 0.5rem;
+            background-color: var(--dark-gray);
+            border-radius: 50%;
+        }
+
+        .typing-text {
+            font-size: 0.875rem;
+            color: var(--dark-gray);
+        }
+
+        /* File processing indicator */
+        .file-processing {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            border-radius: 1rem;
+            /* background: linear-gradient(to right, #4b5563, var(--primary-blue)); */
+            color: #1c1c1c;
+            /* border: 1px solid var(--white); */
+            margin-right: auto;
+            max-width: 70%;
+        }
+
+        .processing-spinner {
+            width: 0.625rem;
+            height: 0.625rem;
+            border: 2px solid var(--primary-gold);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        /* Welcome message */
+        .welcome-message {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .welcome-icon {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .welcome-title {
+            color: var(--dark-gray);
+            font-size: 1.125rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .welcome-subtitle {
+            color: #9ca3af;
+        }
+
+        /* Chat header component */
+        .app-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            padding: 1rem 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .menu-button {
+            position: relative;
+            font-size: 1.5rem;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            background-color: var(--light-gray);
+            border: 1px solid var(--medium-gray);
+            color: var(--dark-gray);
+            transition: all 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-button:hover {
+            background-color: var(--medium-gray);
+            border-color: #d1d5db;
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .menu-button:active {
+            transform: scale(0.95);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .menu-button.active {
+            background-color: #dbeafe;
+            border-color: #93c5fd;
+            color: var(--light-blue);
+        }
+
+        .avatar-container {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .avatar {
+            width: 2.75rem;
+            height: 2.75rem;
+            border-radius: 50%;
+            background: linear-gradient(to right, var(--primary-gold), var(--primary-blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--white);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 2px solid var(--white);
+            transition: all 0.3s;
+        }
+
+        .avatar:hover {
+            transform: scale(1.1);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-indicator {
+            position: absolute;
+            bottom: -0.125rem;
+            right: -0.125rem;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 50%;
+            border: 2px solid var(--white);
+        }
+
+        .status-indicator.authenticated {
+            background-color: var(--success);
+        }
+
+        .status-indicator.unauthenticated {
+            background-color: var(--dark-gray);
+        }
+
+        .avatar-tooltip {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background-color: #1f2937;
+            color: var(--white);
+            font-size: 0.75rem;
+            border-radius: 0.375rem;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .avatar-container:hover .avatar-tooltip {
+            opacity: 1;
+        }
+
+        /* Sidebar */
+        .sidebar-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            transition: all 0.3s;
+        }
+
+        .sidebar-overlay.hidden {
+            visibility: hidden;
+            opacity: 0;
+        }
+
+        .sidebar-backdrop {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            transition: all 0.3s;
+        }
+
+        .sidebar-overlay.hidden .sidebar-backdrop {
+            opacity: 0;
+        }
+
+        .sidebar {
+            position: absolute;
+            right: 0;
+            top: 0;
+            height: 100%;
+            width: 20rem;
+            max-width: 90vw;
+            background-color: var(--white);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            overflow: hidden;
+            transform: translateX(100%);
+            transition: transform 0.3s;
+        }
+
+        .sidebar-overlay:not(.hidden) .sidebar {
+            transform: translateX(0);
+        }
+
+        .sidebar-header {
+            background: linear-gradient(to right, #fcfcfc, #d5d5d5);
+            border-bottom: 1px solid var(--medium-gray);
+            padding: 1rem;
+        }
+
+        .sidebar-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .sidebar-title-icon {
+            font-size: 1.25rem;
+            color: var(--light-blue);
+        }
+
+        .sidebar-title-text {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--black);
+        }
+
+        .close-button {
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.15s;
+            color: var(--dark-gray);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #fff;
+            outline: none;
+        }
+
+        .close-button:hover {
+            background-color: rgba(255, 255, 255, 0.6);
+            color: var(--black);
+            transform: scale(1.1);
+        }
+
+        .close-button:active {
+            transform: scale(0.95);
+        }
+
+        .new-chat-button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            background: linear-gradient(to right, var(--primary-gold), var(--primary-blue));
+            color: var(--white);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            border: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .new-chat-button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .new-chat-button:active {
+            transform: scale(0.98);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .clear-all-chats-button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            margin-top: 0.5rem;
+            border-radius: 0.75rem;
+            background: linear-gradient(to right, #ef4444, #dc2626);
+            color: var(--white);
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            border: none;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .clear-all-chats-button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            background: linear-gradient(to right, #dc2626, #b91c1c);
+        }
+
+        .clear-all-chats-button:active {
+            transform: scale(0.98);
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        .sidebar-content {
+            padding: 1rem;
+            height: 100%;
+            overflow: auto;
+            padding-bottom: 12rem;
+        }
+
+        .history-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 0;
+        }
+
+        .loading-spinner {
+            width: 2rem;
+            height: 2rem;
+            border: 2px solid var(--light-blue);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        .loading-text {
+            margin-left: 0.75rem;
+            font-size: 0.875rem;
+            color: var(--dark-gray);
+        }
+
+        .empty-history {
+            text-align: center;
+            padding: 2rem 0;
+            color: #9ca3af;
+        }
+
+        .empty-history-icon {
+            font-size: 2.25rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.5;
+        }
+
+        .empty-history-text {
+            font-size: 0.875rem;
+        }
+
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .history-item {
+            width: 100%;
+            text-align: left;
+            padding: 1rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--medium-gray);
+            background-color: var(--white);
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .history-item:hover {
+            border-color: #93c5fd;
+            background-color: #eff6ff;
+            transform: scale(1.02);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .history-item:active {
+            transform: scale(0.98);
+            background-color: #dbeafe;
+        }
+
+        .history-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--black);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-item:hover .history-label {
+            color: #eb8a37;
+        }
+
+        .history-hint {
+            font-size: 0.75rem;
+            color: #9ca3af;
+            margin-top: 0.25rem;
+        }
+
+        .history-item:hover .history-hint {
+            color: #eb8a37;
+        }
+
+        .history-item.active {
+            border-color: #eb8a37;
+            background-color: #1d375f0a;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transform: scale(1.02);
+            border-left: 4px solid #eb8a37;
+        }
+
+        .history-item.active .history-label {
+            color: var(--primary-blue);
+            font-weight: 600;
+        }
+
+        /* OTP Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.hidden {
+            display: none;
+            visibility: hidden;
+            opacity: 0;
+        }
+
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.hidden .modal-backdrop {
+            opacity: 0;
+        }
+
+        .modal-content {
+            background-color: #ffffff2b;
+            border-radius: 1rem;
+            padding: 2rem;
+            width: 100%;
+            max-width: 28rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--medium-gray);
+            transform: scale(1);
+            transition: all 0.3s;
+        }
+
+        .modal-overlay.hidden .modal-content {
+            transform: scale(0.95);
+        }
+
+        .modal-header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-avatar {
+            width: 4rem;
+            height: 4rem;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #B99A4F, #1d375f);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            margin: 0 auto 1rem;
+            font-size: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .modal-subtitle {
+            color: #fff;
+            font-size: 0.875rem;
+        }
+
+        .auth-error {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            background-color: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--error);
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #fffffffa;
+            margin-bottom: 0.5rem;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--medium-gray);
+            border-radius: 0.75rem;
+            transition: all 0.2s;
+            background-color: #fffffff7;
+        }
+
+        .form-input:focus {
+            border-color: var(--light-blue);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .otp-input {
+            text-align: center;
+            font-size: 1.125rem;
+            letter-spacing: 0.5rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .button-primary {
+            flex: 1;
+            padding: 0.75rem;
+            border-radius: 0.75rem;
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+            color: var(--white);
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+
+        .button-primary:hover {
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+            transform: scale(1.02);
+        }
+
+        .button-primary:active {
+            transform: scale(0.98);
+        }
+
+        .button-secondary {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            border: 1px solid var(--medium-gray);
+            background-color: var(--white);
+            color: var(--dark-gray);
+            font-weight: 500;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .button-secondary:hover {
+            background-color: var(--light-gray);
+            transform: scale(1.02);
+        }
+
+        .button-secondary:active {
+            transform: scale(0.98);
+        }
+
+        .button-success {
+            background-color: var(--success);
+        }
+
+        .button-success:hover {
+            background-color: #059669;
+        }
+
+        /* Animations */
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Responsive */
+        @media (min-width: 768px) {
+            .message-bubble {
+                max-width: 65%;
+                font-size: 0.875rem;
+            }
+
+            .input-button {
+                padding: 0.75rem;
+            }
+
+            .mobile-input,
+            .text-input {
+                font-size: 1rem;
+            }
+        }
+
+        /* Utility classes */
+        .hidden {
+            display: none !important;
+        }
+
+        .flex {
+            display: flex;
+        }
+
+        .items-center {
+            align-items: center;
+        }
+
+        .justify-between {
+            justify-content: space-between;
+        }
+
+        .w-full {
+            width: 100%;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .mb-2 {
+            margin-bottom: 0.5rem;
+        }
+
+        .mb-4 {
+            margin-bottom: 1rem;
+        }
+
+        .mt-2 {
+            margin-top: 0.5rem;
+        }
+
+        .mt-4 {
+            margin-top: 1rem;
+        }
+
+        .ml-auto {
+            margin-left: auto;
+        }
+
+        .mr-auto {
+            margin-right: auto;
+        }
+
+
+        /* Landing------------------------------------------------------ */
+        /* GRID BACKGROUND */
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            opacity: 0.5;
+            z-index: 0;
+        }
+
+        /* ========== LANDING VISIBILITY CONTROL ========== */
+
+        #landing-wrapper {
+            position: fixed;
+            inset: 0;
+            z-index: 999;
+            background: linear-gradient(to bottom, #ffffff, #ffffff, #c5c5c5);
+        }
+
+        #landing-wrapper.hidden {
+            display: none;
+        }
+
+        /* Hide landing page immediately if chatId exists in URL (prevents flash) */
+        html.has-chat-id #landing-wrapper {
+            display: none !important;
+        }
+
+        html.has-chat-id .chat-container {
+            display: flex !important;
+        }
+
+        /* PAGE */
+        .landing-page {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* HERO */
+        .hero {
+            position: relative;
+            z-index: 2;
+            flex: 1;
+            padding: 8rem 1.5rem 4rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* BLOBS */
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.5;
+            z-index: -1;
+        }
+
+        .blob.blue {
+            width: 380px;
+            height: 380px;
+            background: rgba(59, 130, 246, 0.3);
+            top: 0;
+            right: 0;
+        }
+
+        .blob.purple {
+            width: 320px;
+            height: 320px;
+            background: rgba(168, 85, 247, 0.3);
+            bottom: 40px;
+            left: 0;
+        }
+
+        /* BADGE */
+        .badge {
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+            color: #fff;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* TITLE */
+        h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            margin: 0 0 0.5rem;
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            font-weight: 400;
+        }
+
+        /* SUBTEXT */
+        .subtitle {
+            max-width: 720px;
+            font-size: 0.95rem;
+            color: #9ca3af;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        /* BUTTONS */
+        .actions {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            border-radius: 14px;
+            border: 1px solid #ffffff;
+            background: rgba(255, 255, 255, 0.08);
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: all 0.3s ease;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+            font-size: 0.9rem;
+        }
+
+        .action-btn.gold {
+            color: #B99A4F;
+        }
+
+        .action-btn.blue {
+            color: #1d375f;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        /* SEARCH */
+        .search-wrapper {
+            width: 100%;
+            max-width: 720px;
+        }
+
+        .search-box {
+            position: relative;
+            display: flex;
+            align-items: center;
+            border-radius: 18px;
+            padding: 0.5rem;
+            border: 1px solid rgba(100, 116, 139, 0.4);
+            backdrop-filter: blur(10px);
+            transition: border-color 0.3s ease;
+        }
+
+        .search-box:hover {
+            border-color: #1d375f;
+        }
+
+        .search-box input {
+            flex: 1;
+            border: none;
+            outline: none;
+            background: transparent;
+            padding: 1rem;
+            font-size: 1rem;
+            color: #3c3c3c;
+            min-height: 3.5rem;
+            z-index: 2;
+            /* Input above placeholder */
+        }
+
+        .placeholder {
+            position: absolute;
+            left: 1.5rem;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            pointer-events: none;
+            color: #6b7280;
+            font-size: 1rem;
+            z-index: 1;
+            transition: opacity 0.2s;
+        }
+
+        .placeholder.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .send-btn {
+            background: linear-gradient(to right, #B99A4F, #1d375f);
+            border: none;
+            border-radius: 14px;
+            padding: 0.75rem;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .send-btn i {
+            color: #fff;
+            font-size: 1.2rem;
+            transform: rotate(90deg);
+        }
+
+        /* ANIMATIONS */
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- GRID BACKGROUND -->
+    <div class="grid-bg">
+        <svg width="100%" height="100%">
+            <defs>
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" stroke-width="1" />
+                </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
+    </div>
+    <!-- App Header (ChatHeader) -->
+    <header class="app-header">
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <button id="home-button" class="menu-button" aria-label="Go to home" title="Go to welcome screen" style="display: none;">
+                <i class="ri-home-line"></i>
+            </button>
+            <button id="menu-button" class="menu-button" aria-label="Open menu">
+                <i class="ri-menu-2-fill"></i>
+            </button>
+        </div>
+
+        <div class="avatar-container">
+            <div class="avatar">
+                <i class="ri-user-3-line"></i>
+                <div id="auth-status" class="status-indicator unauthenticated"></div>
+            </div>
+            <div class="avatar-tooltip">Not logged in</div>
+        </div>
+    </header>
+
+    <!-- Sidebar (Chat History) -->
+    <div id="sidebar-overlay" class="sidebar-overlay hidden">
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="sidebar-title">
+                        <span class="sidebar-title-icon"><i class="ri-history-line"></i></span>
+                        <h3 class="sidebar-title-text">Chat History</h3>
+                    </div>
+                    <button id="close-sidebar" class="close-button">
+                        <i class="ri-close-line"></i>
+                    </button>
+                </div>
+
+                <button id="new-chat-button" class="new-chat-button">
+                    <span><i class="ri-chat-ai-line"></i></span>
+                    Start New Chat
+                </button>
+                
+                <button id="clear-all-chats-button" class="clear-all-chats-button">
+                    <span><i class="ri-delete-bin-line"></i></span>
+                    Clear All Chats
+                </button>
+            </div>
+
+            <div class="sidebar-content">
+                <div id="history-loading" class="history-loading hidden">
+                    <div class="loading-spinner"></div>
+                    <span class="loading-text">Loading chats...</span>
+                </div>
+
+                <div id="empty-history" class="empty-history hidden">
+                    <div class="empty-history-icon">📜</div>
+                    <div class="empty-history-text">No previous chats found.</div>
+                </div>
+
+                <ul id="history-list" class="history-list"></ul>
+            </div>
+        </aside>
+    </div>
+
+    <!-- OTP Modal -->
+    <div id="otp-modal" class="modal-overlay hidden">
+        <div class="modal-backdrop" id="otp-modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-avatar"><i class="ri-user-3-line"></i></div>
+                <h4 class="modal-title">Welcome Back</h4>
+                <p class="modal-subtitle">Sign in with your email to access your chat history</p>
+            </div>
+
+            <div id="auth-error" class="auth-error hidden"></div>
+
+            <div id="otp-send-section">
+                <div class="form-group">
+                    <label class="form-label">Email Address</label>
+                    <input type="email" id="email-input" class="form-input" placeholder="you@example.com">
+                </div>
+                <div class="button-group">
+                    <button id="send-otp-button" class="button-primary">Send OTP</button>
+                    <button id="cancel-otp-button" class="button-secondary">Cancel</button>
+                </div>
+            </div>
+
+            <div id="otp-verify-section" class="hidden">
+                <div class="form-group">
+                    <label class="form-label">Enter Verification Code</label>
+                    <input type="text" id="otp-input" class="form-input otp-input" placeholder="123456" maxlength="6">
+                </div>
+                <div class="button-group">
+                    <button id="verify-otp-button" class="button-primary button-success">Verify Code</button>
+                    <button id="back-otp-button" class="button-secondary">Back</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Welcome Landing -->
+    <div id="landing-wrapper">
+        <div class="landing-page">
+            <section class="hero">
+                <div class="blob blue"></div>
+                <div class="blob purple"></div>
+
+                <div class="badge">✨ GIA AI - Medical Insurance Assistant</div>
+
+                <h1>What Do You Want Today?</h1>
+
+                <p class="subtitle">
+                    Empower your choices with clear, reliable medical insurance guidance.
+                    Understand your coverage, compare plans, and make confident decisions for your health.
+                </p>
+
+                <div class="actions">
+                    <button class="action-btn gold" onclick="startInsuranceFlow()">
+                        <i class="ri-heart-pulse-line"></i>
+                        Medical Insurance
+                        <i class="ri-arrow-right-line"></i>
+                    </button>
+
+                    <button class="action-btn blue" onclick="startDetailsFlow()">
+                        <i class="ri-chat-3-line"></i>
+                        Get Details
+                        <i class="ri-arrow-right-line"></i>
+                    </button>
+                </div>
+
+                <div class="search-wrapper">
+                    <div class="search-box">
+                        <div class="placeholder" id="placeholder">
+                            <span>Ask AI</span>
+                            <span id="rotatingText">To build...</span>
+                        </div>
+
+                        <input type="text" id="searchInput" oninput="handleInput()" onkeydown="handleEnter(event)" />
+
+                        <button class="send-btn" onclick="handleManualSend()">
+                            <i class="ri-arrow-up-line"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Chat Container (Page.jsx) -->
+    <div class="chat-container">
+        <!-- Chat Header -->
+        <!-- <div class="chat-header">
+            <div class="header-left">
+                <h2>Medical Insurance Assistant</h2>
+                <p>AI-powered insurance guidance</p>
+            </div>
+            <div class="header-right">
+                🤖
+            </div>
+        </div> -->
+
+        <!-- Messages Area -->
+        <div class="messages-area" id="messages-area" ClientIDMode="Static">
+            <!-- Messages will be dynamically inserted here -->
+            <div class="welcome-message">
+                <div class="welcome-icon">👋</div>
+                <div class="welcome-title">Welcome!</div>
+                <div class="welcome-subtitle">I'm here to help with your medical insurance needs</div>
+            </div>
+        </div>
+
+        <!-- Input Area -->
+        <div class="input-area">
+            <div class="input-row">
+                <!-- File Attachment Button -->
+                <button id="file-button" type="button" ClientIDMode="Static" class="input-button file-button" title="Upload Emirates ID Front">
+                    <i class="ri-attachment-line"></i>
+                </button>
+                <input type="file" id="file-input" ClientIDMode="Static" class="hidden" accept="image/*,application/pdf">
+
+                <!-- Message Input / Mobile Input -->
+                <div class="input-field">
+                    <!-- Mobile Input (shown when asking for mobile) -->
+                    <div id="mobile-input-container" class="mobile-input-container hidden">
+                        <div id="mobile-input-error" class="mobile-input-error hidden"></div>
+                        <div id="mobile-input-helper" class="mobile-input-helper hidden">Enter 9 digits starting with 5
+                        </div>
+                        <div class="mobile-input-wrapper">
+                            <div class="mobile-flag">🇦🇪</div>
+                            <div class="mobile-prefix">+971</div>
+                            <input type="tel" id="mobile-input" class="mobile-input" placeholder="5X XXX XXXX"
+                                maxlength="11">
+                        </div>
+                    </div>
+
+                    <!-- Regular Text Input -->
+                    <textarea id="text-input" class="text-input" ClientIDMode="Static" placeholder="Type your message here..."
+                        rows="1"></textarea>
+                </div>
+
+                <!-- Voice Recording Button -->
+                <button id="voice-button" class="input-button voice-button" title="Start Recording" ClientIDMode="Static" type="button">
+                    <i class="ri-mic-2-line"></i>
+                </button>
+
+                <!-- Send Button -->
+                <button type="submit" id="send-button" class="input-button send-button" title="Send Message" ClientIDMode="Static" type="button">
+                    <i class="ri-send-plane-fill"></i>
+                </button>
+            </div>
+
+            <!-- Recording/Transcription Status -->
+            <div id="recording-status" class="status-indicator hidden">
+                <div class="status-dot"></div>
+                <span id="recording-text">Recording audio...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API Configuration
+        // const API_BASE = 'https://api.keralahome.in';
+        const API_BASE = 'http://127.0.0.1:8006/';
+        // const API_TOKEN = "b5cebd205000d8dd8469d84f9f5fc7dcfcdf7c6f";
+        
+        // Get API token from localStorage or use empty string
+        function getApiToken() {
+            return localStorage.getItem("api_token") || "";
+        }
+
+
+        // URL Management Utilities
+        function getChatIdFromURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get('chatId');
+        }
+
+        function updateURLWithChatId(chatId) {
+            if (!chatId) {
+                // Remove chatId from URL if it doesn't exist
+                const url = new URL(window.location.href);
+                url.searchParams.delete('chatId');
+                window.history.replaceState({}, '', url);
+                return;
+            }
+            // Update URL with chatId without reload
+            const url = new URL(window.location.href);
+            url.searchParams.set('chatId', chatId);
+            window.history.replaceState({}, '', url);
+        }
+
+        function getSessionIdFromSource() {
+            // Priority: URL chatId > localStorage (for backward compatibility)
+            const urlChatId = getChatIdFromURL();
+            if (urlChatId) {
+                return urlChatId;
+            }
+            // Fallback to localStorage for backward compatibility
+            return localStorage.getItem("insurance_session_id") || null;
+        }
+
+        // State Management
+        const state = {
+            // Chat state
+            messages: [],
+            options: [],
+            sessionId: getSessionIdFromSource(),
+            isProcessing: false,
+            currentStep: "start",
+            emiratesRecord: null,
+            fileProcessingLabel: "",
+            uploadingSide: null,
+            missingFieldsQueue: [],
+            currentMissingValue: "",
+            recordId: null,
+            isRecording: false,
+            showTyping: false,
+            messageInput: "",
+            nextUploadSide: "front",
+            isTranscribing: false,
+            missingFieldInputMode: false,
+            mobileNumber: "",
+            mobileError: "",
+
+            // Authentication state
+            isAuthenticated: false,
+            isVerified: '',
+            authError: '',
+            products: [],
+            selectedProduct: null,
+            postMobileMissingFields: [],
+
+            // UI state
+            sidebarOpen: false,
+            showOtpModal: false,
+            email: "",
+            otp: "",
+            otpSent: false,
+            chatHistory: [],
+            historyLoading: false,
+
+            // Refs
+            mediaRecorder: null,
+            recordedChunks: [],
+
+            // Timeouts
+            timeouts: {
+                typing: null,
+                message: null,
+                messageQueue: null,
+                fileProgress: []
+            },
+
+            // Other state
+            lastActionTime: 0,
+            isProcessingRequest: false,
+            savedMobile: null,
+            isInitialized: false,
+            animatedMessageIds: new Set()
+        };
+
+        const gsapAnimations = {
+            initLanding: () => {
+                gsap.set(".badge, h1, .subtitle, .actions, .search-wrapper", { clearProps: "all" });
+                const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+                tl.from(".badge", { y: 20, opacity: 0, duration: 0.8, delay: 0.2 })
+                    .from("h1", { y: 30, opacity: 0, duration: 1, stagger: 0.1 }, "-=0.6")
+                    .from(".subtitle", { y: 20, opacity: 0, duration: 0.8 }, "-=0.6")
+                    .from(".actions", { y: 20, opacity: 0, duration: 0.8 }, "-=0.6")
+                    .from(".search-wrapper", { y: 20, opacity: 0, duration: 0.8 }, "-=0.6");
+
+                // Blobs
+                gsap.to(".blob.blue", { x: 50, y: -50, duration: 8, repeat: -1, yoyo: true, ease: "sine.inOut" });
+                gsap.to(".blob.purple", { x: -50, y: 50, duration: 10, repeat: -1, yoyo: true, ease: "sine.inOut" });
+            },
+            transitionToChat: (onComplete) => {
+                const tl = gsap.timeline({ onComplete });
+                tl.to(".landing-page > *", { y: -50, opacity: 0, duration: 0.8, stagger: 0.1, ease: "power2.in" })
+                    .to("#landing-wrapper", { opacity: 0, duration: 0.5, display: "none" });
+            },
+            animateMessage: (element) => {
+                gsap.from(element, { y: 20, opacity: 0, duration: 0.5, ease: "back.out(1.2)" });
+            },
+            revealProducts: (container) => {
+                gsap.from(container.children, { y: 30, opacity: 0, duration: 0.6, stagger: 0.1, ease: "power2.out" });
+            },
+            openSidebar: () => {
+                gsap.to(elements.sidebarOverlay, { autoAlpha: 1, duration: 0.3, display: "block" });
+                gsap.to(document.querySelector(".sidebar"), { x: 0, duration: 0.4, ease: "power3.out" });
+            },
+            closeSidebar: (onComplete) => {
+                gsap.to(document.querySelector(".sidebar"), { x: "100%", duration: 0.3, ease: "power3.in" });
+                gsap.to(elements.sidebarOverlay, {
+                    autoAlpha: 0, duration: 0.3, delay: 0.1, onComplete: () => {
+                        elements.sidebarOverlay.classList.add('hidden');
+                        if (onComplete) onComplete();
+                    }
+                });
+            },
+            initRotatingText: () => {
+                const phrases = ["To build...", "To assist...", "To explore...", "To create..."];
+                let currentIndex = 0;
+                const textElement = document.getElementById("rotatingText");
+
+                if (!textElement) return;
+
+                // Initial set
+                textElement.textContent = phrases[0];
+
+                function cycleText() {
+                    const nextIndex = (currentIndex + 1) % phrases.length;
+                    const nextPhrase = phrases[nextIndex];
+
+                    const tl = gsap.timeline({
+                        onComplete: () => {
+                            currentIndex = nextIndex;
+                            // Recurse
+                            gsap.delayedCall(1.0, cycleText); // 1 second hold as requested "smoothie timeline"
+                        }
+                    });
+
+                    // Exit current (fade-up)
+                    tl.to(textElement, {
+                        y: -10,
+                        opacity: 0,
+                        duration: 0.5,
+                        ease: "power2.in"
+                    });
+
+                    // Set next text (invisible)
+                    tl.call(() => {
+                        textElement.textContent = nextPhrase;
+                    });
+
+                    // Enter next (fade-up from bottom)
+                    tl.fromTo(textElement, {
+                        y: 10,
+                        opacity: 0
+                    }, {
+                        y: 0,
+                        opacity: 1,
+                        duration: 0.5,
+                        ease: "power2.out"
+                    });
+                }
+
+                // Start the cycle after 1.5s
+                gsap.delayedCall(1.5, cycleText);
+            }
+        };
+
+        const LANDING_KEY = "chat_started";
+        let chatIntent = null; // "insurance" | "details" | "free"
+
+
+        // DOM Elements
+        const elements = {
+            // ChatHeader elements
+            homeButton: document.getElementById('home-button'),
+            menuButton: document.getElementById('menu-button'),
+            authStatus: document.getElementById('auth-status'),
+            avatarTooltip: document.querySelector('.avatar-tooltip'),
+
+            // Sidebar elements
+            sidebarOverlay: document.getElementById('sidebar-overlay'),
+            sidebarBackdrop: document.getElementById('sidebar-backdrop'),
+            closeSidebar: document.getElementById('close-sidebar'),
+            newChatButton: document.getElementById('new-chat-button'),
+            clearAllChatsButton: document.getElementById('clear-all-chats-button'),
+            historyLoading: document.getElementById('history-loading'),
+            emptyHistory: document.getElementById('empty-history'),
+            historyList: document.getElementById('history-list'),
+
+            // OTP Modal elements
+            otpModal: document.getElementById('otp-modal'),
+            otpModalBackdrop: document.getElementById('otp-modal-backdrop'),
+            authError: document.getElementById('auth-error'),
+            otpSendSection: document.getElementById('otp-send-section'),
+            otpVerifySection: document.getElementById('otp-verify-section'),
+            emailInput: document.getElementById('email-input'),
+            otpInput: document.getElementById('otp-input'),
+            sendOtpButton: document.getElementById('send-otp-button'),
+            cancelOtpButton: document.getElementById('cancel-otp-button'),
+            verifyOtpButton: document.getElementById('verify-otp-button'),
+            backOtpButton: document.getElementById('back-otp-button'),
+
+            // Page elements
+            messagesArea: document.getElementById('messages-area'),
+            fileButton: document.getElementById('file-button'),
+            fileInput: document.getElementById('file-input'),
+            mobileInputContainer: document.getElementById('mobile-input-container'),
+            mobileInputError: document.getElementById('mobile-input-error'),
+            mobileInputHelper: document.getElementById('mobile-input-helper'),
+            mobileInput: document.getElementById('mobile-input'),
+            textInput: document.getElementById('text-input'),
+            voiceButton: document.getElementById('voice-button'),
+            sendButton: document.getElementById('send-button'),
+            recordingStatus: document.getElementById('recording-status'),
+            recordingText: document.getElementById('recording-text')
+        };
+
+        function handleKeyPress(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSendClick();
+            }
+        }
+
+
+        // Prevent accidental page refresh when in active chat
+        function setupRefreshPrevention() {
+            // Only prevent refresh if we're in an active chat (not on welcome screen)
+            const isInChat = () => {
+                const chatId = getChatIdFromURL();
+                const landingHidden = document.getElementById("landing-wrapper")?.classList.contains("hidden");
+                return chatId || (landingHidden && state.sessionId);
+            };
+
+            // Warn before page unload (only if in active chat)
+            window.addEventListener('beforeunload', (e) => {
+                if (isInChat() && state.messages.length > 0) {
+                    // Standard way to show browser's default warning dialog
+                    e.preventDefault();
+                    e.returnValue = ''; // Chrome requires returnValue to be set
+                    return ''; // Some browsers require return value
+                }
+            });
+
+            // Prevent common keyboard shortcuts for refresh
+            document.addEventListener('keydown', (e) => {
+                if (!isInChat()) return; // Only prevent if in active chat
+                
+                // Prevent F5
+                if (e.key === 'F5') {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Prevent Ctrl+R / Cmd+R
+                if ((e.ctrlKey || e.metaKey) && e.key === 'r') {
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // Prevent Ctrl+Shift+R / Cmd+Shift+R (hard refresh)
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
+                    e.preventDefault();
+                    return false;
+                }
+            });
+
+            // Prevent right-click context menu on refresh button area (hacky, but helps)
+            // Note: This won't work on mobile browsers
+            document.addEventListener('contextmenu', (e) => {
+                // Only prevent if clicking on browser UI areas (we can't really detect this reliably)
+                // So we'll skip this as it's too invasive
+            }, false);
+        }
+
+        // Initialize the application
+        function init() {
+            console.log("🚀 Initializing application...");
+
+            // Set up refresh prevention
+            setupRefreshPrevention();
+
+            // Set up event listeners
+            setupEventListeners();
+
+            // Initialize GSAP
+            gsapAnimations.initLanding();
+            gsapAnimations.initRotatingText();
+
+            // Get sessionId from URL first, then localStorage as fallback
+            const urlChatId = getChatIdFromURL();
+            const existingSessionId = getSessionIdFromSource();
+            
+            // Update state.sessionId from URL or localStorage
+            state.sessionId = existingSessionId;
+
+            if (urlChatId) {
+                console.log("🔍 Found chatId in URL:", urlChatId);
+                // Don't show landing page yet - let initializeSession handle it
+                // initializeSession will try to recover the session and show/hide landing accordingly
+            } else if (existingSessionId) {
+                console.log("🔍 Found existing session ID in localStorage:", existingSessionId);
+                // Migrate localStorage sessionId to URL for consistency
+                updateURLWithChatId(existingSessionId);
+                // Don't show landing page yet - let initializeSession handle it
+            } else {
+                // No existing session - show welcome page
+                console.log("📄 No existing session, showing welcome page");
+                showLanding();
+            }
+
+            // Check authentication and initialize session
+            // This will handle session recovery and decide whether to show landing page
+            initializeSession().then(() => {
+                // Update button states based on authentication
+                updateButtonStates();
+            });
+
+            // Update home button visibility based on URL
+            updateHomeButtonVisibility();
+
+            // Auto-scroll to bottom
+            scrollToBottom();
+        }
+        
+        // Update button states based on authentication
+        function updateButtonStates() {
+            const insuranceBtn = document.querySelector('.action-btn.gold');
+            const detailsBtn = document.querySelector('.action-btn.blue');
+            const manualInput = document.getElementById('searchInput');
+            const manualSendBtn = document.querySelector('.send-btn');
+            
+            if (!state.isAuthenticated || !getApiToken()) {
+                // Visual lock (grayed out) but buttons remain clickable to show login modal
+                if (insuranceBtn) {
+                    insuranceBtn.style.opacity = '0.5';
+                    insuranceBtn.style.cursor = 'pointer'; // Still clickable
+                    insuranceBtn.title = 'Click to login';
+                }
+                if (detailsBtn) {
+                    detailsBtn.style.opacity = '0.5';
+                    detailsBtn.style.cursor = 'pointer'; // Still clickable
+                    detailsBtn.title = 'Click to login';
+                }
+                if (manualInput) {
+                    manualInput.disabled = false; // Keep enabled so user can click
+                    manualInput.style.opacity = '0.5';
+                }
+                if (manualSendBtn) {
+                    manualSendBtn.disabled = false; // Keep enabled so user can click
+                    manualSendBtn.style.opacity = '0.5';
+                }
+            } else {
+                // Enable buttons when logged in
+                if (insuranceBtn) {
+                    insuranceBtn.style.opacity = '1';
+                    insuranceBtn.style.cursor = 'pointer';
+                    insuranceBtn.title = '';
+                }
+                if (detailsBtn) {
+                    detailsBtn.style.opacity = '1';
+                    detailsBtn.style.cursor = 'pointer';
+                    detailsBtn.title = '';
+                }
+                if (manualInput) {
+                    manualInput.disabled = false;
+                    manualInput.style.opacity = '1';
+                    manualInput.placeholder = 'Ask AI';
+                }
+                if (manualSendBtn) {
+                    manualSendBtn.disabled = false;
+                    manualSendBtn.style.opacity = '1';
+                }
+            }
+        }
+
+        function startChat() {
+            // Check authentication for manual typing
+            if (!state.isAuthenticated || !getApiToken()) {
+                setShowOtpModal(true);
+                return;
+            }
+            
+            // Set intent to manual typing
+            chatIntent = "free";
+            
+            gsapAnimations.transitionToChat(() => {
+                markChatStarted();
+                document.getElementById("text-input")?.focus();
+            });
+        }
+
+        function handleInput() {
+            const input = document.getElementById('searchInput');
+            const placeholder = document.getElementById('placeholder');
+            const sendBtn = document.querySelector('.send-btn');
+
+            if (input.value.length > 0) {
+                placeholder.classList.add('hidden');
+                sendBtn.classList.add('active');
+            } else {
+                placeholder.classList.remove('hidden');
+                sendBtn.classList.remove('active');
+            }
+        }
+
+        function handleManualSend() {
+            // Check authentication FIRST - if not logged in, show login popup
+            if (!state.isAuthenticated || !getApiToken()) {
+                setShowOtpModal(true);
+                return;
+            }
+            
+            const input = document.getElementById('searchInput');
+            const text = input ? input.value.trim() : '';
+
+            if (!text) return;
+
+            // ✅ STEP 1: Show USER message FIRST
+            appendMessage("user", text);
+
+            // ✅ STEP 2: Clear input
+            input.value = "";
+
+            // ❌ DO NOT show typing indicator here if you don't want it
+            // showTypingIndicator();  <-- remove or keep after append (optional)
+
+            // ✅ STEP 3: Send to backend
+            fetch("/chat/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Token " + API_TOKEN
+                },
+                body: JSON.stringify({
+                    user_text: text,
+                    intent: "insurance"
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                // hideTypingIndicator(); // only if you use it
+
+                if (data.reply) {
+                    appendMessage("bot", data.reply);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                appendMessage("bot", "Something went wrong.");
+            });
+        }
+
+
+        function appendMessage(role, text) {
+        const messagesArea = document.querySelector(".messages-area");
+
+        const wrapper = document.createElement("div");
+        wrapper.className = `message ${role}`;
+
+        const bubble = document.createElement("div");
+        bubble.className = "message-bubble";
+        bubble.innerText = text;
+
+        wrapper.appendChild(bubble);
+        messagesArea.appendChild(wrapper);
+
+        messagesArea.scrollTop = messagesArea.scrollHeight;
+    }
+
+
+
+        async function startInsuranceFlow() {
+            console.log("🔍 startInsuranceFlow called");
+            console.log("🔍 isAuthenticated:", state.isAuthenticated);
+            console.log("🔍 apiToken:", getApiToken() ? "exists" : "missing");
+            
+            // Check authentication FIRST - if not logged in, show login popup
+            if (!state.isAuthenticated || !getApiToken()) {
+                console.log("🔐 User not authenticated, showing login modal");
+                setShowOtpModal(true);
+                return;
+            }
+            
+            console.log("✅ User authenticated, starting workflow");
+            
+            // Only hide landing and start workflow if authenticated
+            chatIntent = "insurance";
+            hideLanding();
+            
+            // Show typing indicator immediately
+            setShowTyping(true);
+            
+            // Disable button to prevent multiple clicks
+            const insuranceBtn = document.querySelector('.action-btn.gold');
+            if (insuranceBtn) {
+                insuranceBtn.disabled = true;
+                insuranceBtn.style.opacity = '0.6';
+                insuranceBtn.style.cursor = 'wait';
+            }
+            
+            try {
+                // Call the new auto-start workflow endpoint
+                const response = await fetch(`${API_BASE}/api/start-insurance-workflow/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "include"
+                });
+                
+                // Hide typing indicator
+                setShowTyping(false);
+                
+                // Re-enable button
+                if (insuranceBtn) {
+                    insuranceBtn.disabled = false;
+                    insuranceBtn.style.opacity = '1';
+                    insuranceBtn.style.cursor = 'pointer';
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Set session ID and update URL
+                    if (data.session_id) {
+                        state.sessionId = data.session_id;
+                        updateURLWithChatId(data.session_id);
+                        localStorage.setItem("insurance_session_id", data.session_id);
+                    }
+                    
+                    // Display initial bot message
+                    if (data.reply) {
+                        pushMessage(data.reply, "bot", 0);
+                    }
+                    
+                    // Display options if available
+                    if (data.options && data.options.length > 0) {
+                        setOptions(data.options);
+                    }
+                } else {
+                    // Hide typing indicator on error
+                    setShowTyping(false);
+                    // Fallback to old method if new endpoint fails
+                    sendChatToBackend("");
+                }
+            } catch (error) {
+                console.error("Error starting insurance workflow:", error);
+                // Hide typing indicator on error
+                setShowTyping(false);
+                // Re-enable button on error
+                if (insuranceBtn) {
+                    insuranceBtn.disabled = false;
+                    insuranceBtn.style.opacity = '1';
+                    insuranceBtn.style.cursor = 'pointer';
+                }
+                // Fallback to old method
+                sendChatToBackend("");
+            }
+        }
+
+
+        async function startDetailsFlow() {
+            console.log("🔍 startDetailsFlow called");
+            console.log("🔍 isAuthenticated:", state.isAuthenticated);
+            console.log("🔍 apiToken:", getApiToken() ? "exists" : "missing");
+            
+            // Check authentication FIRST - if not logged in, show login popup
+            if (!state.isAuthenticated || !getApiToken()) {
+                console.log("🔐 User not authenticated, showing login modal");
+                setShowOtpModal(true);
+                return;
+            }
+            
+            console.log("✅ User authenticated, starting details flow");
+            
+            // Only hide landing and start flow if authenticated
+            chatIntent = "details";
+            state.missingFieldInputMode = false;
+            state.missingFieldsQueue = [];
+            hideLanding();
+            
+            // Show typing indicator immediately
+            setShowTyping(true);
+            
+            // Disable button to prevent multiple clicks
+            const detailsBtn = document.querySelector('.action-btn.blue');
+            if (detailsBtn) {
+                detailsBtn.disabled = true;
+                detailsBtn.style.opacity = '0.6';
+                detailsBtn.style.cursor = 'wait';
+            }
+            
+            try {
+                // Call the get insurance details endpoint
+                const response = await fetch(`${API_BASE}/api/get-insurance-details/`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "include"
+                });
+                
+                // Hide typing indicator
+                setShowTyping(false);
+                
+                // Re-enable button
+                if (detailsBtn) {
+                    detailsBtn.disabled = false;
+                    detailsBtn.style.opacity = '1';
+                    detailsBtn.style.cursor = 'pointer';
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Display the message
+                    if (data.message) {
+                        pushMessage(data.message, "bot", 0);
+                    }
+                    
+                    // Display all applications
+                    if (data.applications && data.applications.length > 0) {
+                        data.applications.forEach((app, index) => {
+                            let detailsText = `\n📋 Insurance Application ${index + 1}:\n\n`;
+                            detailsText += `📅 Application Date: ${new Date(app.created_at).toLocaleDateString()}\n`;
+                            
+                            if (app.emirates_id_details) {
+                                detailsText += `🆔 Emirates ID: ${app.emirates_id_details.emirates_id || 'N/A'}\n`;
+                                detailsText += `👤 Name: ${app.emirates_id_details.name || 'N/A'}\n`;
+                                detailsText += `📅 Date of Birth: ${app.emirates_id_details.dob || 'N/A'}\n`;
+                                detailsText += `🌍 Nationality: ${app.emirates_id_details.nationality || 'N/A'}\n`;
+                                detailsText += `⚧️ Gender: ${app.emirates_id_details.gender || 'N/A'}\n`;
+                                detailsText += `💼 Occupation: ${app.emirates_id_details.occupation || 'N/A'}\n`;
+                                detailsText += `📍 Issuing Place: ${app.emirates_id_details.issuing_place || 'N/A'}\n`;
+                                detailsText += `📆 Expiry Date: ${app.emirates_id_details.expiry_date || 'N/A'}\n`;
+                            }
+                            
+                            if (app.salary) {
+                                detailsText += `💰 Salary: ${app.salary}\n`;
+                            }
+                            
+                            if (app.role) {
+                                detailsText += `👔 Role: ${app.role}\n`;
+                            }
+                            
+                            if (app.products && app.products.length > 0) {
+                                detailsText += `\n📦 Recommended Products:\n`;
+                                app.products.forEach(product => {
+                                    detailsText += `  • ${product.name} (${product.plan}) - ${product.price}\n`;
+                                    if (product.url) {
+                                        detailsText += `    🔗 ${product.url}\n`;
+                                    }
+                                });
+                            }
+                            
+                            pushMessage(detailsText, "bot", 0);
+                        });
+                    } else {
+                        pushMessage("You don't have any previous insurance applications.", "bot", 0);
+                    }
+                } else {
+                    // Hide typing indicator on error
+                    setShowTyping(false);
+                    // Re-enable button on error
+                    const detailsBtn = document.querySelector('.action-btn.blue');
+                    if (detailsBtn) {
+                        detailsBtn.disabled = false;
+                        detailsBtn.style.opacity = '1';
+                        detailsBtn.style.cursor = 'pointer';
+                    }
+                    // Fallback message
+                    pushMessage("Which details are you looking for?", "bot", 0);
+                }
+            } catch (error) {
+                console.error("Error getting insurance details:", error);
+                // Hide typing indicator on error
+                setShowTyping(false);
+                // Re-enable button on error
+                const detailsBtn = document.querySelector('.action-btn.blue');
+                if (detailsBtn) {
+                    detailsBtn.disabled = false;
+                    detailsBtn.style.opacity = '1';
+                    detailsBtn.style.cursor = 'pointer';
+                }
+                pushMessage("Which details are you looking for?", "bot", 0);
+            }
+        }
+
+
+
+
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') {
+                // Check authentication FIRST - if not logged in, show login popup
+                if (!state.isAuthenticated || !getApiToken()) {
+                    e.preventDefault();
+                    setShowOtpModal(true);
+                    return;
+                }
+                startChat();
+            }
+        }
+
+        function handleInput() {
+            const input = document.getElementById('searchInput');
+            const placeholder = document.getElementById('placeholder');
+            const sendBtn = document.querySelector('.send-btn');
+
+            if (input.value.length > 0) {
+                placeholder.classList.add('hidden');
+                sendBtn.classList.add('active');
+            } else {
+                placeholder.classList.remove('hidden');
+                sendBtn.classList.remove('active');
+            }
+        }
+
+
+        // Set up all event listeners
+        function setupEventListeners() {
+            // ChatHeader events
+            if (elements.homeButton) {
+                elements.homeButton.addEventListener('click', handleHomeClick);
+            }
+            elements.menuButton.addEventListener('click', handleMenuClick);
+
+            // Sidebar events
+            elements.sidebarBackdrop.addEventListener('click', () => setSidebarOpen(false));
+            elements.closeSidebar.addEventListener('click', () => setSidebarOpen(false));
+            elements.newChatButton.addEventListener('click', handleNewChat);
+            elements.clearAllChatsButton.addEventListener('click', handleClearAllChats);
+
+            // OTP Modal events
+            elements.otpModalBackdrop.addEventListener('click', () => setShowOtpModal(false));
+            elements.sendOtpButton.addEventListener('click', handleSendOtp);
+            elements.cancelOtpButton.addEventListener('click', () => setShowOtpModal(false));
+            elements.verifyOtpButton.addEventListener('click', handleVerifyOtp);
+            elements.backOtpButton.addEventListener('click', () => {
+                setOtpSent(false);
+                setOtp("");
+            });
+
+            elements.emailInput.addEventListener('input', (e) => {
+                state.email = e.target.value;
+                if (state.authError) setAuthError("");
+            });
+
+            elements.otpInput.addEventListener('input', (e) => {
+                state.otp = e.target.value;
+                if (state.authError) setAuthError("");
+            });
+
+            // keypress event for OTP input
+            elements.otpInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleVerifyOtp();
+                }
+            });
+
+            elements.emailInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    handleSendOtp();
+                }
+            });
+
+
+            elements.fileButton.addEventListener('click', () => elements.fileInput.click());
+            elements.fileInput.addEventListener('change', onFileChange);
+            elements.mobileInput.addEventListener('input', handleMobileInputChange);
+            elements.textInput.addEventListener('input', handleTextInputChange);
+            elements.textInput.addEventListener('keypress', handleKeyPress);
+            elements.voiceButton.addEventListener('click', handleVoiceButtonClick);
+            elements.sendButton.addEventListener('click', handleSendClick);
+
+            // Avatar hover
+            const avatarContainer = document.querySelector('.avatar-container');
+            avatarContainer.addEventListener('mouseenter', updateAvatarTooltip);
+        }
+
+        function updateAvatarTooltip() {
+            elements.avatarTooltip.textContent = state.isAuthenticated ? "Authenticated" : "Not logged in";
+        }
+
+        // ChatHeader functions
+        function handleMenuClick() {
+            if (!state.isAuthenticated) {
+                setShowOtpModal(true);
+            } else {
+                setSidebarOpen(!state.sidebarOpen);
+                if (state.sidebarOpen) {
+                    loadHistory();
+                }
+            }
+        }
+
+        function handleHomeClick() {
+            // Navigate to base URL (remove chatId) to show welcome screen
+            const baseUrl = window.location.origin + window.location.pathname;
+            window.location.href = baseUrl;
+        }
+
+        function updateHomeButtonVisibility() {
+            // Show home button only when in chat (chatId exists in URL)
+            const chatId = getChatIdFromURL();
+            if (elements.homeButton) {
+                if (chatId) {
+                    elements.homeButton.style.display = 'flex';
+                } else {
+                    elements.homeButton.style.display = 'none';
+                }
+            }
+        }
+
+        function showLanding() {
+            const landing = document.getElementById("landing-wrapper");
+            const chatContainer = document.querySelector(".chat-container");
+            if (landing) landing.classList.remove("hidden");
+            if (chatContainer) chatContainer.style.display = "none";
+        }
+
+        function hideLanding() {
+            const landing = document.getElementById("landing-wrapper");
+            const chatContainer = document.querySelector(".chat-container");
+            if (landing) landing.classList.add("hidden");
+            if (chatContainer) chatContainer.style.display = "flex";
+        }
+
+        function markChatStarted() {
+            localStorage.setItem(LANDING_KEY, "true");
+            hideLanding();
+        }
+
+
+        function setSidebarOpen(open) {
+            state.sidebarOpen = open;
+            if (open) {
+                elements.sidebarOverlay.classList.remove('hidden');
+                gsapAnimations.openSidebar();
+            } else {
+                gsapAnimations.closeSidebar();
+            }
+        }
+
+        function setShowOtpModal(show) {
+            console.log("🔍 setShowOtpModal called with:", show);
+            console.log("🔍 otpModal element:", elements.otpModal);
+            
+            state.showOtpModal = show;
+            if (show) {
+                if (elements.otpModal) {
+                    elements.otpModal.classList.remove('hidden');
+                    elements.otpModal.style.display = 'flex';
+                    elements.otpModal.style.visibility = 'visible';
+                    elements.otpModal.style.opacity = '1';
+                    console.log("✅ OTP modal shown");
+                } else {
+                    console.error("❌ OTP modal element not found!");
+                }
+                setAuthError("");
+                if (elements.emailInput) {
+                    setTimeout(() => elements.emailInput.focus(), 100);
+                }
+            } else {
+                if (elements.otpModal) {
+                    elements.otpModal.classList.add('hidden');
+                    elements.otpModal.style.display = 'none';
+                    console.log("✅ OTP modal hidden");
+                }
+                setOtpSent(false);
+                setOtp("");
+                setEmail("");
+                setAuthError("");
+            }
+        }
+
+        // Sidebar functions
+        function handleNewChat() {
+            localStorage.removeItem("insurance_session_id");
+            localStorage.removeItem(LANDING_KEY);
+            window.location.reload();
+        }
+
+        async function handleClearAllChats() {
+            // Show confirmation dialog
+            const confirmed = confirm(
+                "Are you sure you want to delete all your chat history? This action cannot be undone."
+            );
+            
+            if (!confirmed) {
+                return;
+            }
+
+            // Check authentication
+            if (!state.isAuthenticated || !getApiToken()) {
+                alert("Please log in to clear chat history.");
+                return;
+            }
+
+            try {
+                // Disable button during request
+                const button = elements.clearAllChatsButton;
+                button.disabled = true;
+                button.style.opacity = '0.6';
+                button.innerHTML = '<span><i class="ri-loader-4-line"></i></span> Clearing...';
+
+                // Call backend API to delete all chats
+                const response = await fetch(`${API_BASE}/api/auth/clear-all-chats/`, {
+                    method: 'DELETE',
+                    headers: {
+                        "Authorization": "Token " + getApiToken(),
+                        "Content-Type": "application/json"
+                    },
+                    credentials: "include"
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log("✅ All chats cleared:", data);
+
+                // Clear URL and localStorage
+                updateURLWithChatId(null);
+                localStorage.removeItem("insurance_session_id");
+                localStorage.removeItem(LANDING_KEY);
+                
+                // Clear current session state
+                state.sessionId = null;
+                setMessages([]);
+                setChatHistory([]);
+                
+                // Show landing page
+                showLanding();
+                
+                // Close sidebar
+                setSidebarOpen(false);
+                
+                // Reload history (will be empty now)
+                await loadHistory();
+                
+                // Show success message
+                alert(`Successfully deleted ${data.deleted_count || 0} chat session(s).`);
+                
+            } catch (error) {
+                console.error("❌ Error clearing all chats:", error);
+                alert("Failed to clear chat history. Please try again.");
+            } finally {
+                // Re-enable button
+                const button = elements.clearAllChatsButton;
+                button.disabled = false;
+                button.style.opacity = '1';
+                button.innerHTML = '<span><i class="ri-delete-bin-line"></i></span> Clear All Chats';
+            }
+        }
+
+
+        async function loadHistory() {
+            if (!state.isAuthenticated) return;
+
+            setHistoryLoading(true);
+
+            try {
+                // Add credentials to include cookies
+                const response = await fetch(`${API_BASE}/api/auth/chat-history/`, {
+                    method: "GET",
+                    headers: {
+                        "Authorization": "Token " + getApiToken(),
+                        "Content-Type": "application/json"
+                    },
+                    credentials: "include"
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setChatHistory(Array.isArray(data.chat_sessions) ? data.chat_sessions : []);
+                } else if (response.status === 401) {
+                    setIsAuthenticated(false);
+                }
+            } catch (err) {
+                console.error("Failed to load chat history", err);
+            } finally {
+                setHistoryLoading(false);
+            }
+        }
+
+        function handleChooseSession(session) {
+            const sid = session.session_id || session.sessionId || session.id ||
+                session.uuid || session.session || session._id ||
+                session.meta_session_id;
+
+            if (!sid) {
+                console.error("❌ No session ID found in session object");
+                return;
+            }
+
+            console.log("🔄 Switching to session:", sid);
+            // Update URL with new chatId - this will trigger a reload via URL change
+            // Update URL which will cause the page to reload with the new chatId
+            const url = new URL(window.location.href);
+            url.searchParams.set('chatId', String(sid));
+            window.location.href = url.toString();
+        }
+
+        // OTP functions
+        async function handleSendOtp() {
+            setAuthError("");
+
+            const emailValue = elements.emailInput.value.trim() || state.email?.trim();
+
+            if (!emailValue) {
+                setAuthError("Please enter an email.");
+                return;
+            }
+
+            if (!isValidEmail(emailValue)) {
+                setAuthError("Please enter a valid email address.");
+                return;
+            }
+
+            state.email = emailValue;
+
+            try {
+                elements.sendOtpButton.disabled = true;
+                elements.sendOtpButton.textContent = "Sending...";
+
+                const response = await fetch(`${API_BASE}/api/auth/send-otp/`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: emailValue }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok && !data.error) {
+                    setOtpSent(true);
+                    setTimeout(() => elements.otpInput.focus(), 100);
+                } else {
+                    setAuthError(data.error || "Failed to send OTP. Please try again.");
+                }
+            } catch (err) {
+                console.error(err);
+                setAuthError("Network error while sending OTP. Please check your connection.");
+            } finally {
+                elements.sendOtpButton.disabled = false;
+                elements.sendOtpButton.textContent = "Send OTP";
+            }
+        }
+
+
+        async function handleVerifyOtp() {
+            setAuthError("");
+
+            const emailValue = elements.emailInput.value.trim() || state.email?.trim();
+            const otpValue = elements.otpInput.value.trim() || state.otp?.trim();
+
+            if (!emailValue || !otpValue) {
+                setAuthError("Email and OTP are required.");
+                return;
+            }
+
+            if (otpValue.length !== 6) {
+                setAuthError("Please enter a 6-digit OTP code.");
+                return;
+            }
+
+            state.email = emailValue;
+            state.otp = otpValue;
+
+            try {
+                elements.verifyOtpButton.disabled = true;
+                elements.verifyOtpButton.textContent = "Verifying...";
+
+                const response = await fetch(`${API_BASE}/api/auth/verify-otp/`, {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: emailValue, otp_code: otpValue }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok && !data.error) {
+                    // Store token if provided
+                    if (data.token) {
+                        localStorage.setItem("api_token", data.token);
+                    }
+                    
+                    // Store session_id and update authentication state
+                    if (data.session_id) {
+                        localStorage.setItem("insurance_session_id", data.session_id);
+                        setSessionId(data.session_id);
+                    }
+
+                    setIsAuthenticated(true);
+                    setShowOtpModal(false);
+                    
+                    // Return to welcome page (strictly follow flow)
+                    showLanding();
+                    
+                    // Update button states to enable them
+                    updateButtonStates();
+
+                    // Initialize session
+                    initializeSession();
+
+                } else {
+                    setAuthError(data.error || "OTP verification failed. Please try again.");
+                }
+            } catch (err) {
+                console.error(err);
+                setAuthError("Network error while verifying OTP. Please check your connection.");
+            } finally {
+                elements.verifyOtpButton.disabled = false;
+                elements.verifyOtpButton.textContent = "Verify Code";
+            }
+        }
+
+        function isValidEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        // Page functions with proper authentication handling
+        async function initializeSession() {
+            // Prevent multiple initializations
+            if (state.isInitialized) return;
+            state.isInitialized = true;
+
+            console.log("🔍 Initializing session...");
+            
+            // Check if we have a token in localStorage
+            const token = getApiToken();
+            if (!token) {
+                console.log("🔐 No API token found, user needs to login");
+                setIsAuthenticated(false);
+                // Update button states even when not authenticated
+                updateButtonStates();
+                return;
+            }
+
+            // OPTIMISTIC: If token exists, assume user is authenticated
+            // This prevents logout on page refresh
+            console.log("✅ Token found in localStorage, assuming authenticated");
+            setIsAuthenticated(true);
+            updateButtonStates();
+
+            // Verify token in the background (non-blocking)
+            // If verification fails, we'll update the state then
+            try {
+                // Simple token verification - just try to get user info or make a lightweight call
+                const authResponse = await fetch(`${API_BASE}/api/insurance-chat/`, {
+                    method: 'POST',
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + token
+                    },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        user_text: '',
+                        session_id: state.sessionId || ''
+                    })
+                });
+
+                // Handle different response scenarios
+                if (authResponse.status === 401) {
+                    console.log("🔐 Token verification failed - token may be expired");
+                    // Only clear token if it's definitely invalid
+                    localStorage.removeItem("api_token");
+                    setIsAuthenticated(false);
+                    updateButtonStates();
+                    return;
+                }
+
+                if (authResponse.ok) {
+                    console.log("✅ Token verified successfully");
+                    // Already set to authenticated above, just confirm
+                    setIsAuthenticated(true);
+                    updateButtonStates();
+                } else {
+                    console.log("⚠️ Token verification returned non-200, but keeping optimistic auth");
+                    // Don't immediately logout - let the user try to use the app
+                    // If the token is truly invalid, the next API call will fail and we can handle it then
+                }
+            } catch (error) {
+                console.warn("⚠️ Token verification check failed (network error?), keeping optimistic auth:", error);
+                // Don't logout on network errors - token might still be valid
+                // Keep the optimistic authentication state
+            }
+
+            // Try to recover session if sessionId exists
+            if (state.sessionId) {
+                console.log("🔄 Attempting to recover session:", state.sessionId);
+                const recovered = await recoverSession(state.sessionId);
+                // Check if recovery was successful (session exists, even if no chat_session property)
+                if (recovered && recovered.sessionExists) {
+                    console.log("✅ Session recovered successfully, loading chat...");
+                    // Update session state from recovered data
+                    if (recovered.chat_session) {
+                        setCurrentStep(recovered.chat_session.step || "start");
+                    }
+                    if (recovered.emirates_record) {
+                        setEmiratesRecord(recovered.emirates_record);
+                        setRecordId(recovered.emirates_record.id);
+                    }
+                    // Ensure messages are displayed (they should be loaded by recoverSession)
+                    // Landing page is already hidden by recoverSession if messages were loaded
+                    if (recovered.messagesLoaded) {
+                        scrollToBottom();
+                    }
+                    // Don't start a new chat flow - we're in an existing session
+                    return;
+                } else {
+                    console.log("❌ Session recovery failed, clearing invalid session ID");
+                    // Clear invalid session ID from URL and localStorage
+                    updateURLWithChatId(null);
+                    localStorage.removeItem("insurance_session_id");
+                    state.sessionId = null;
+                    // Show landing page since recovery failed
+                    showLanding();
+                    // Continue to start new session flow below
+                }
+            }
+
+            // Only start fresh if no valid session exists or recovery failed
+            console.log("🚀 Starting new session flow");
+            // If we're here, it means no valid session was found
+            // Clear any existing chatId from URL when starting fresh
+            // The new sessionId will be set when the backend responds
+            const urlChatId = getChatIdFromURL();
+            if (urlChatId) {
+                // If there's a chatId in URL but recovery failed, clear it
+                console.log("⚠️ chatId in URL but session recovery failed, clearing URL");
+                updateURLWithChatId(null);
+            }
+            // Show landing page for new sessions
+            showLanding();
+            setShowTyping(true);
+
+            // Use setTimeout to ensure UI is ready before starting chat
+            setTimeout(() => {
+                sendChatToBackend("", true);
+            }, 1000);
+        }
+
+        async function recoverSession(sessionIdToRecover) {
+            if (!sessionIdToRecover) return null;
+
+            try {
+                console.log("🔍 Attempting session recovery for:", sessionIdToRecover);
+                const response = await fetch(`${API_BASE}/api/get-session/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "include",
+                    body: JSON.stringify({ session_id: sessionIdToRecover }),
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log("✅ Session recovered:", data);
+
+                    // Load chat history
+                    const historyMessages = await loadChatHistoryFromBackend(sessionIdToRecover);
+                    if (historyMessages.length > 0) {
+                        console.log(`📨 Loaded ${historyMessages.length} messages from history`);
+                        setMessages(historyMessages);
+                        // Hide landing page and show chat when messages are loaded
+                        hideLanding();
+                        // Scroll to bottom to show latest messages
+                        setTimeout(() => scrollToBottom(), 100);
+                        // Return success indicator with messages loaded flag
+                        return { ...data, messagesLoaded: true, sessionExists: true };
+                    } else {
+                        console.log("⚠️ No messages found in history, but session exists");
+                        // Even if no messages, hide landing page if session exists
+                        hideLanding();
+                        // Return success indicator even without messages
+                        return { ...data, messagesLoaded: false, sessionExists: true };
+                    }
+                } else {
+                    console.log("❌ Session not found, creating new one");
+                    return null;
+                }
+            } catch (error) {
+                console.error("❌ Session recovery failed:", error);
+                return null;
+            }
+        }
+
+        async function loadChatHistoryFromBackend(sessionIdToLoad) {
+            if (!sessionIdToLoad) return [];
+
+            try {
+                const response = await fetch(`${API_BASE}/api/insurance-chat/?session_id=${sessionIdToLoad}`, {
+                    method: "GET",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "include",
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.messages && Array.isArray(data.messages)) {
+                        const messages = data.messages.map((msg, idx) => ({
+                            id: `history-${idx}-${Date.now()}`,
+                            from: msg.role === "bot" ? "bot" : "user",
+                            text: msg.content,
+                        }));
+
+                        // Filter out consecutive duplicates from the bot
+                        const uniqueMessages = [];
+                        let lastBotMessage = null;
+
+                        messages.forEach(msg => {
+                            if (msg.from === "bot") {
+                                if (!lastBotMessage || lastBotMessage.text.trim() !== msg.text.trim()) {
+                                    uniqueMessages.push(msg);
+                                    lastBotMessage = msg;
+                                }
+                            } else {
+                                uniqueMessages.push(msg);
+                                lastBotMessage = null; // Reset on user message
+                            }
+                        });
+
+                        return uniqueMessages;
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to load chat history:", error);
+            }
+            return [];
+        }
+
+        // Message handling with duplicate prevention
+        function pushMessage(text, from = "bot", typingDelay = 2000) {
+            if (!text || text.trim() === "") return;
+
+            // Clear any existing timeout
+            if (state.timeouts.message) {
+                clearTimeout(state.timeouts.message);
+            }
+
+            if (from === "bot") {
+                setShowTyping(true);
+
+                // Store timeout ID for cleanup
+                state.timeouts.message = setTimeout(() => {
+                    setShowTyping(false);
+                    setMessages((prev) => {
+                        // Check last 5 messages for duplicates
+                        const recentMessages = prev.slice(-5);
+                        const isDuplicate = recentMessages.some(
+                            (msg) => msg.from === "bot" && msg.text.trim() === text.trim()
+                        );
+
+                        if (isDuplicate) {
+                            console.log("⚠️ Duplicate bot message prevented:", text.substring(0, 50));
+                            return prev;
+                        }
+
+                        return [...prev, {
+                            id: `msg-${Date.now()}-${Math.random()}`,
+                            from,
+                            text
+                        }];
+                    });
+                }, typingDelay);
+            } else {
+                setMessages((prev) => {
+                    // Check last 3 user messages for duplicates
+                    const recentUserMessages = prev.slice(-3).filter(m => m.from === "user");
+                    const isDuplicate = recentUserMessages.some(
+                        (msg) => msg.text === text
+                    );
+
+                    if (isDuplicate) {
+                        console.log("⚠️ Duplicate user message prevented:", text.substring(0, 50));
+                        return prev;
+                    }
+
+                    return [...prev, {
+                        id: `msg-${Date.now()}-${Math.random()}`,
+                        from,
+                        text
+                    }];
+                });
+            }
+        }
+
+        function pushUploadProgress(text) {
+            setFileProcessingLabel(text);
+        }
+
+        // Core chat function with authentication handling
+        async function sendChatToBackend(message = "", createIfMissing = false, isInitial = false) {
+
+            // Allow empty message only if createIfMissing is true (for initialization)
+            if (!message || !message.trim()) {
+                if (!createIfMissing) {
+                    state.isProcessingRequest = false;
+                    return;
+                }
+                // If createIfMissing is true, use empty string but still send request
+                message = "";
+            }
+
+            if (state.isProcessingRequest) {
+                console.log("⚠️ Request already in progress, skipping duplicate request");
+                return;
+            }
+
+            state.isProcessingRequest = true;
+
+            try {
+                // If user is currently answering a missing field question, save it directly
+                if (state.missingFieldInputMode && state.missingFieldsQueue.length > 0) {
+                    const currentField = state.missingFieldsQueue[0];
+                    await handleSaveMissingField(currentField, message);
+                    state.isProcessingRequest = false;
+                    return;
+                }
+
+                setShowTyping(true);
+                setOptions([]);
+
+                const endpoint =
+                    chatIntent === "insurance"
+                        ? `${API_BASE}/api/insurance-chat/`
+                        : `${API_BASE}/api/chat/`;
+
+                // Ensure we always send session_id (even if null, backend will handle it)
+                // But log a warning if we're creating a new session
+                if (!state.sessionId) {
+                    console.log("⚠️ No sessionId in state, backend will create new session");
+                }
+
+                // credentials to include cookies
+                const response = await fetch(endpoint, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        user_text: message,
+                        session_id: state.sessionId || null,  // Explicitly send null if not set
+                        intent: chatIntent || "free"
+                    })
+                });
+
+                if (response.status === 401) {
+                    const errorData = await response.json().catch(() => ({}));
+                    setShowTyping(false);
+                    setIsAuthenticated(false);
+                    setShowOtpModal(true);
+                    pushMessage("Please log in to continue the conversation.", "bot");
+                    state.isProcessingRequest = false;
+                    return;
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Store session_id to URL and localStorage for persistence across page refreshes
+                if (data.session_id) {
+                    // Update URL with chatId
+                    updateURLWithChatId(data.session_id);
+                    // Always save to localStorage for backward compatibility
+                    localStorage.setItem("insurance_session_id", data.session_id);
+                    if (data.session_id !== state.sessionId) {
+                        setSessionId(data.session_id);
+                    }
+                }
+
+                if (data.products && data.products.length > 0) {
+                    setShowTyping(false);
+                    const lines = data.products.map((p, i) => `${i + 1}. ${p.name} — ${p.price} (${p.plan})`);
+                    pushMessage(
+                        (data.reply || "Based on your Emirates ID and salary, here are the available products:\n\n") + lines.join("\n"),
+                        "bot"
+                    );
+                    setProducts(data.products);
+                    setCurrentStep("complete");
+                    // Still show options if provided
+                    if (data.options && data.options.length > 0) {
+                        const optionsTimeout = setTimeout(() => {
+                            setOptions(data.options);
+                        }, 2000);
+                        if (state.timeouts.typing) clearTimeout(state.timeouts.typing);
+                        state.timeouts.typing = optionsTimeout;
+                    }
+                    return;
+                }
+
+                // If backend provided a reply (bot text), show it with typing and delay the options
+                if (data.reply) {
+                    setShowTyping(false);
+                    pushMessage(data.reply, "bot");
+
+                    // delay showing quick options for a smooth feel
+                    const optionsTimeout = setTimeout(() => {
+                        setOptions(data.options || []);
+                    }, 2000);
+
+                    // Store timeout for cleanup
+                    if (state.timeouts.typing) clearTimeout(state.timeouts.typing);
+                    state.timeouts.typing = optionsTimeout;
+                } else {
+                    setShowTyping(false);
+                    setOptions(data.options || []);
+                }
+
+                // set step (best-effort)
+                if (data.step) {
+                    setCurrentStep(data.step);
+                } else {
+                    // derive step changes from known replies
+                    if (data.reply && (
+                        data.reply.toLowerCase().includes("please upload") && 
+                        (data.reply.toLowerCase().includes("emirates id") || data.reply.toLowerCase().includes("emirates id"))
+                    )) {
+                        setCurrentStep("awaiting_id_frontside");
+                    }
+                }
+            } catch (err) {
+                console.error("sendChatToBackend error", err);
+                pushMessage("Sorry, there was an error processing your request. Please try again.", "bot");
+            } finally {
+                state.isProcessingRequest = false;
+            }
+        }
+
+        function handleOptionClick(opt) {
+            // Debounce: Prevent rapid clicks (minimum 500ms between actions)
+            const now = Date.now();
+            if (now - state.lastActionTime < 500) {
+                console.log("⚠️ Action too soon, debouncing...");
+                return;
+            }
+            state.lastActionTime = now;
+
+            // Prevent if already processing
+            if (state.isProcessingRequest) {
+                console.log("⚠️ Request in progress, please wait...");
+                return;
+            }
+
+            pushMessage(opt, "user");
+            setOptions([]);
+
+            // Handle family sponsor flow - only if explicitly in sponsor step
+            if (state.currentStep === "sponsor_q" || state.currentStep === "awaiting_sponsor_name") {
+                if (opt.toLowerCase() === "yes") {
+                    // Send to backend to handle sponsor name request
+                    sendChatToBackend(opt);
+                    return;
+                } else {
+                    // Send "No" to backend - let AI handle the flow
+                    sendChatToBackend(opt);
+                    return;
+                }
+            }
+
+            // Handle "yes" (but not sponsor flow)
+            if (opt.toLowerCase() === "yes") {
+                sendChatToBackend(opt);
+                return;
+            }
+
+            // Handle login modal when choosing role
+            if (["employee", "depender"].includes(opt.toLowerCase()) && !state.isAuthenticated) {
+                setShowOtpModal(true);
+            } else {
+                sendChatToBackend(opt);
+            }
+        }
+
+        async function handleFileUpload(file, side = null) {
+            if (!file || !state.sessionId) {
+                pushMessage("Upload failed: missing file or session.", "bot");
+                return;
+            }
+
+            setIsProcessing(true);
+            pushMessage("Uploading Emirates ID...", "user");
+
+            // Clear any existing file progress timeouts
+            state.timeouts.fileProgress.forEach(t => clearTimeout(t));
+            state.timeouts.fileProgress = [];
+
+            setFileProcessingLabel("Uploading File");
+            const t1 = setTimeout(() => setFileProcessingLabel("Reading..."), 1600);
+            const t2 = setTimeout(() => setFileProcessingLabel("Processing..."), 3200);
+            state.timeouts.fileProgress.push(t1, t2);
+
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("session_id", state.sessionId);
+
+            const TIMEOUT_MS = 120000; // 120 seconds
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/emirates-id/`, {
+                    method: "POST",
+                    headers: {
+                        // Don't set Content-Type for FormData - browser will set it with boundary
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "same-origin",
+                    body: formData,
+                    signal: controller.signal,
+                });
+                console.log("Emirates ID Upload Response:", response);
+
+                if (!response.ok) {
+                    const text = await response.text().catch(() => "");
+                    pushMessage(
+                        "Server failed to process file: " + (text || response.statusText || response.status),
+                        "bot"
+                    );
+                    console.error("HTTP error while uploading file:", response.status, text);
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    pushMessage("Server failed to process file: " + data.error, "bot");
+                    console.error(data.error);
+                    return;
+                }
+                
+                // Handle duplicate Emirates ID
+                if (data.declined && data.error === "duplicate_emirates_id") {
+                    pushMessage(data.message || "This Emirates ID already has an active insurance application.", "bot");
+                    setIsProcessing(false);
+                    return;
+                }
+
+                // Store record ID
+                if (data.id) setRecordId(data.id);
+
+                // Display extracted fields
+                let hasFormattedMessage = false;
+                if (data.fields && Object.keys(data.fields).length > 0) {
+                    const displayFields = { ...data.fields };
+                    delete displayFields.sex;
+                    delete displayFields.address;
+
+                    const formattedData = formatEmiratesData(displayFields);
+                    pushMessage("✅ Upload Completed! Here's what I found:\n\n" + formattedData, "bot");
+                    hasFormattedMessage = true;
+                }
+
+                setEmiratesRecord((prev) => ({ ...(prev || {}), ...(data.fields || {}) }));
+
+                // Don't show products immediately
+                setProducts([]);
+
+                // Handle mobile first - but delay it to appear AFTER the formatted data message
+                if (data.ask_mobile) {
+                    // Store remaining missing fields to ask after mobile is saved
+                    const remainingMissing = Array.isArray(data.missing_fields)
+                        ? data.missing_fields.filter((f) => f !== "mobile")
+                        : [];
+                    setPostMobileMissingFields(remainingMissing);
+
+                    // If we showed formatted data, delay the mobile message
+                    const delay = hasFormattedMessage ? 2500 : 0;
+
+                    // Clear any existing queue timeout
+                    if (state.timeouts.messageQueue) {
+                        clearTimeout(state.timeouts.messageQueue);
+                    }
+
+                    state.timeouts.messageQueue = setTimeout(() => {
+                        pushMessage("Please enter your mobile number.", "bot");
+                        setMissingFieldsQueue(["mobile"]);
+                        setMissingFieldInputMode(true);
+                        setCurrentMissingValue("");
+                        setMobileNumber(""); // Clear previous mobile input
+                        setMobileError(""); // Clear previous errors
+                        state.timeouts.messageQueue = null;
+                    }, delay);
+                    return;
+                }
+
+                // Handle missing fields (if any) - also delay to appear after formatted message
+                if (data.missing_fields && data.missing_fields.length > 0) {
+                    const nextMissing = data.missing_fields[0];
+                    const pretty = nextMissing.replace(/_/g, " ");
+                    const delay = hasFormattedMessage ? 2500 : 0;
+
+                    // Clear any existing queue timeout
+                    if (state.timeouts.messageQueue) {
+                        clearTimeout(state.timeouts.messageQueue);
+                    }
+
+                    state.timeouts.messageQueue = setTimeout(() => {
+                        pushMessage(`Please provide your ${pretty}.`, "bot");
+                        setMissingFieldsQueue(data.missing_fields);
+                        setMissingFieldInputMode(true);
+                        // Clear mobile input if switching to different field
+                        if (nextMissing !== "mobile") {
+                            setMobileNumber("");
+                            setMobileError("");
+                        }
+                        state.timeouts.messageQueue = null;
+                    }, delay);
+                    return;
+                }
+
+                // Handle products only after all info complete - delay to appear after formatted message
+                if (data.products && data.products.length > 0) {
+                    const lines = data.products.map(
+                        (p, i) => `${i + 1}. ${p.name} — ${p.price} (${p.plan})`
+                    );
+                    const delay = hasFormattedMessage ? 2500 : 0;
+
+                    // Clear any existing queue timeout
+                    if (state.timeouts.messageQueue) {
+                        clearTimeout(state.timeouts.messageQueue);
+                    }
+
+                    state.timeouts.messageQueue = setTimeout(() => {
+                        pushMessage(
+                            "Based on your Emirates ID and salary, here are the available products:\n\n" +
+                            lines.join("\n"),
+                            "bot"
+                        );
+                        setProducts(data.products);
+                        setCurrentStep("complete");
+                        state.timeouts.messageQueue = null;
+                    }, delay);
+                    return;
+                }
+
+                // Handle optional message - delay to appear after formatted message
+                if (data.message) {
+                    const delay = hasFormattedMessage ? 2500 : 0;
+
+                    // Clear any existing queue timeout
+                    if (state.timeouts.messageQueue) {
+                        clearTimeout(state.timeouts.messageQueue);
+                    }
+
+                    state.timeouts.messageQueue = setTimeout(() => {
+                        pushMessage(data.message, "bot");
+                        state.timeouts.messageQueue = null;
+                    }, delay);
+                }
+
+                // Success message - only show if no other messages were shown
+                if (!hasFormattedMessage && !data.products && !data.message) {
+                    pushMessage("Emirates ID processed successfully.", "bot");
+                }
+            } catch (err) {
+                console.error("upload error", err);
+                if (err.name === "AbortError") {
+                    pushMessage("File processing timed out after 2 minutes. Please try again with a smaller file or check your internet connection.", "bot");
+                } else {
+                    pushMessage(`File upload failed: ${err.message || "Unknown error"}. Please try again.`, "bot");
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                state.timeouts.fileProgress.forEach(t => clearTimeout(t));
+                state.timeouts.fileProgress = [];
+                setFileProcessingLabel("");
+                setIsProcessing(false);
+            }
+        }
+
+        function onFileChange(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+
+            const file = files[0];
+            if (!file) return;
+
+            // Check if we're in passport upload mode
+            if (state.currentStep === "awaiting_passport") {
+                handlePassportUpload([file]);
+            } else {
+                // For Emirates ID
+                handleFileUpload(file);
+            }
+
+            e.target.value = null;
+        }
+
+        async function handlePassportUpload(files) {
+            // Handle both single file and multiple files
+            const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
+
+            if (fileArray.length === 0 || !state.sessionId) {
+                pushMessage("Upload failed: missing file or session.", "bot");
+                return;
+            }
+
+            setIsProcessing(true);
+            pushMessage("Uploading passport...", "user");
+
+            state.timeouts.fileProgress.forEach(t => clearTimeout(t));
+            state.timeouts.fileProgress = [];
+
+            setFileProcessingLabel("Uploading Passport");
+            const t1 = setTimeout(() => setFileProcessingLabel("Reading passport..."), 1600);
+            const t2 = setTimeout(() => setFileProcessingLabel("Processing passport..."), 3200);
+            state.timeouts.fileProgress.push(t1, t2);
+
+            const formData = new FormData();
+            // Append single file
+            formData.append("file", fileArray[0]);
+            formData.append("session_id", state.sessionId);
+
+            const controller = new AbortController();
+            const TIMEOUT_MS = 180000; // Longer timeout for passport
+            const timeoutId = setTimeout(() => {
+                console.warn("⚠️ Passport upload request timed out. Aborting fetch...");
+                controller.abort();
+            }, TIMEOUT_MS);
+
+            try {
+                const response = await fetch(`${API_BASE}/api/passport/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "same-origin",
+                    body: formData,
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    const text = await response.text().catch(() => "");
+                    pushMessage(
+                        "Server failed to process passport: " + (text || response.statusText || response.status),
+                        "bot"
+                    );
+                    console.error("HTTP error while uploading passport:", response.status, text);
+                    return;
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    pushMessage("Server failed to process passport: " + data.error, "bot");
+                    console.error(data.error);
+                    return;
+                }
+
+                // Display passport fields FIRST
+                let hasFormattedMessage = false;
+                if (data.fields && Object.keys(data.fields).length > 0) {
+                    const displayFields = { ...data.fields };
+
+                    // Format name as "Given Name + Surname" if both are available
+                    if (displayFields.given_name && displayFields.surname) {
+                        displayFields.name = `${displayFields.given_name} ${displayFields.surname}`;
+                    }
+                    // Remove given_name and surname from display
+                    delete displayFields.given_name;
+                    delete displayFields.surname;
+
+                    // Format: passport_number, name, dob
+                    const formattedData = formatEmiratesData(displayFields);
+                    if (formattedData.trim()) {
+                        // Display immediately (no delay for fields)
+                        pushMessage("✅ Passport Upload Completed! Here's what I found:\n\n" + formattedData, "bot");
+                        hasFormattedMessage = true;
+                    }
+                }
+
+                // If backend detected a name mismatch, show simple error and STOP
+                if (data.name_compare && data.name_compare.mismatch) {
+                    // Show simple error message after fields
+                    const delay = hasFormattedMessage ? 2500 : 0;
+                    if (state.timeouts.messageQueue) {
+                        clearTimeout(state.timeouts.messageQueue);
+                    }
+                    state.timeouts.messageQueue = setTimeout(() => {
+                        pushMessage("Please upload the matching Passport", "bot");
+                        setCurrentStep("passport_validation_failed");
+                        state.timeouts.messageQueue = null;
+                    }, delay);
+                    // Don't show validation or products if names don't match
+                    return;
+                }
+
+                // Display validation results ONLY if names match
+                if (data.validation) {
+                    const validation = data.validation;
+                    // Delay if we showed fields
+                    const delay = hasFormattedMessage ? 2500 : 0;
+
+                    state.timeouts.messageQueue = setTimeout(() => {
+                        let validationMessage = "📋 Passport Validation:\n\n";
+                        validationMessage += `${validation.name_match_message}\n\n`;
+                        validationMessage += `**${validation.validation_message}**`;
+
+                        pushMessage(validationMessage, "bot");
+
+                        if (validation.is_valid) {
+                            setCurrentStep("passport_verified");
+                            setTimeout(() => {
+                                pushMessage("✅ Your passport has been verified successfully!", "bot");
+                                // After passport validation, fetch and show products
+                                setTimeout(() => {
+                                    fetchProductsAfterMobileSave();
+                                }, 2000);
+                            }, 2500);
+                        } else {
+                            setCurrentStep("passport_validation_failed");
+                            setTimeout(() => {
+                                pushMessage("Please upload a clear passport image with all details visible.", "bot");
+                            }, 2500);
+                        }
+                        state.timeouts.messageQueue = null;
+                    }, delay);
+                }
+            } catch (err) {
+                console.error("passport upload error", err);
+                if (err.name === "AbortError") {
+                    pushMessage("Passport processing timed out. Please try again.", "bot");
+                } else {
+                    pushMessage("Passport upload failed. Try again.", "bot");
+                }
+            } finally {
+                clearTimeout(timeoutId);
+                state.timeouts.fileProgress.forEach(t => clearTimeout(t));
+                state.timeouts.fileProgress = [];
+                setFileProcessingLabel("");
+                setIsProcessing(false);
+            }
+        }
+
+        function formatEmiratesData(data) {
+            const formatted = Object.entries(data)
+                .filter(([key, value]) => value && key !== "missing_fields")
+                .map(([key, value]) => {
+                    const label = key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+                    return `${label}: ${value}`;
+                })
+                .join("\n");
+            return formatted;
+        }
+
+        async function handleSaveMissingField(fieldName, value) {
+            try {
+                // Special-case mobile -> goes to ChatSession via /api/save-mobile/
+                if (fieldName === "mobile") {
+                    const response = await fetch(`${API_BASE}/api/save-mobile/`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Token " + getApiToken()
+                        },
+                        credentials: "same-origin",
+                        body: JSON.stringify({ session_id: state.sessionId, mobile: value }),
+                    });
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(data.error || "Failed to save mobile");
+                    }
+
+                    pushMessage(`Thanks! I've updated your mobile number to ${data?.message?.match(/\+971\d+/)?.[0] || value}.`, "bot");
+                    // Remember the saved mobile for later product fetching
+                    state.savedMobile = value;
+
+                    // Reset mobile input mode back to normal textarea
+                    setMissingFieldInputMode(false);
+                    setMissingFieldsQueue([]);
+                    setMobileNumber("");
+                    setMobileError("");
+                    setMessageInput("");
+
+                    // After saving mobile, ask remaining missing fields (if any) BEFORE passport
+                    const remaining = Array.isArray(state.postMobileMissingFields) ? state.postMobileMissingFields : [];
+                    if (remaining.length > 0) {
+                        setMissingFieldsQueue(remaining);
+                        setMissingFieldInputMode(true);
+                        const pretty = remaining[0].replace(/_/g, " ");
+                        pushMessage(`Please provide your ${pretty}.`, "bot");
+                        // Clear the stored list once we start asking them
+                        setPostMobileMissingFields([]);
+                    } else {
+                        // Use products returned by /api/save-mobile/ directly
+                        const productsFromSave = Array.isArray(data?.products) ? data.products : [];
+                        const infoMessage = data?.info_message;
+
+                        if (productsFromSave.length > 0) {
+                            const lines = productsFromSave.map(
+                                (p, i) => `${i + 1}. ${p.name} — ${p.price} (${p.plan})`
+                            );
+                            pushMessage(
+                                "Here are the best available insurance plans for you:\n\n" + lines.join("\n"),
+                                "bot"
+                            );
+                            setProducts(productsFromSave);
+                            setCurrentStep("complete");
+                        } else if (infoMessage) {
+                            // Show any informative message returned by backend
+                            pushMessage(infoMessage, "bot");
+                        }
+                    }
+                    return;
+                }
+
+                // Everything else -> use /api/save-missing-field/ (expects record_id + field_name)
+                // Note: This would need the record ID which we might not have in this simplified version
+                // For now, we'll just acknowledge the field was saved
+                pushMessage(`Thanks! I've updated your ${fieldName.replace(/_/g, " ")}.`, "bot");
+
+                // Pop locally to continue with the next missing field
+                const [, ...rest] = state.missingFieldsQueue;
+                if (rest.length > 0) {
+                    setMissingFieldsQueue(rest);
+                    const pretty = rest[0].replace(/_/g, " ");
+                    pushMessage(`Please provide your ${pretty}.`, "bot");
+                    setMissingFieldInputMode(true);
+                } else {
+                    // All missing fields are now collected
+                    setMissingFieldInputMode(false);
+                    setTimeout(async () => {
+                        pushMessage("✅ All required details captured! Fetching best insurance plans for you...", "bot");
+                        try {
+                            // Reuse save-mobile endpoint to recompute products with updated record/session
+                            const response = await fetch(`${API_BASE}/api/save-mobile/`, {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/json",
+                                    "Authorization": "Token " + getApiToken()
+                                },
+                                credentials: "same-origin",
+                                body: JSON.stringify({
+                                    session_id: state.sessionId,
+                                    mobile: state.savedMobile || ""
+                                }),
+                            });
+                            const data = await response.json();
+
+                            if (response.ok && data.products && data.products.length > 0) {
+                                const lines = data.products.map(
+                                    (p, i) => `${i + 1}. ${p.name} — ${p.price} (${p.plan})`
+                                );
+                                pushMessage(
+                                    "Here are the best available insurance plans for you:\n\n" + lines.join("\n"),
+                                    "bot"
+                                );
+                                setProducts(data.products);
+                                setCurrentStep("complete");
+                            } else if (data.info_message) {
+                                pushMessage(data.info_message, "bot");
+                            } else {
+                                pushMessage("Sorry, no insurance plans found for now.", "bot");
+                            }
+                        } catch (err) {
+                            console.error("Failed to fetch products after filling fields:", err);
+                            pushMessage("Sorry, I couldn't fetch the products right now. Please try again.", "bot");
+                        }
+                    }, 1000);
+                }
+            } catch (err) {
+                console.error("saveMissingField error", err);
+                pushMessage("Failed to save field, please try again.", "bot");
+            }
+        }
+
+        async function fetchProductsAfterMobileSave() {
+            try {
+                setShowTyping(true);
+
+                // Call the insurance-chat endpoint to continue the flow and get products
+                const response = await fetch(`${API_BASE}/api/insurance-chat/`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    credentials: "same-origin",
+                    body: JSON.stringify({
+                        session_id: state.sessionId,
+                        user_text: "" // Empty string - backend will handle passport_verified step
+                    }),
+                });
+
+                // Parse response body once
+                const data = await response.json().catch(() => ({}));
+
+                // Handle authentication errors
+                if (response.status === 401) {
+                    if (data.error && data.login_required) {
+                        setIsAuthenticated(false);
+                        setShowOtpModal(true);
+                        setShowTyping(false);
+                        pushMessage("Please log in to continue.", "bot");
+                        return;
+                    }
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                setShowTyping(false);
+
+                // Handle products response
+                if (data.products && data.products.length > 0) {
+                    const lines = data.products.map((p, i) => `${i + 1}. ${p.name} — ${p.price} (${p.plan})`);
+                    pushMessage(
+                        (data.reply || "Based on your Emirates ID and salary, here are the available products:\n\n") + lines.join("\n"),
+                        "bot"
+                    );
+                    setProducts(data.products);
+                    setCurrentStep("complete");
+                    // Update step if provided
+                    if (data.step) {
+                        setCurrentStep(data.step);
+                    }
+                } else if (data.reply) {
+                    // If there's a regular reply (no products yet), show it
+                    pushMessage(data.reply, "bot");
+                    setOptions(data.options || []);
+                    if (data.step) {
+                        setCurrentStep(data.step);
+                    }
+                } else {
+                    // No reply and no products - fallback message
+                    pushMessage("Processing your request...", "bot");
+                }
+            } catch (error) {
+                console.error("Error fetching products:", error);
+                setShowTyping(false);
+                // Check if it's an authentication error
+                if (error.message && error.message.includes('401')) {
+                    setIsAuthenticated(false);
+                    setShowOtpModal(true);
+                    pushMessage("Please log in to continue.", "bot");
+                } else {
+                    pushMessage("Sorry, there was an error fetching available products.", "bot");
+                }
+            }
+        }
+
+        // Voice recording functions
+        function handleVoiceButtonClick() {
+            if (state.isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        async function startRecording() {
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                pushMessage("Recording not supported in this browser.", "bot");
+                return;
+            }
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mediaRecorder = new MediaRecorder(stream);
+                const recordedChunks = [];
+
+                mediaRecorder.ondataavailable = (event) => {
+                    if (event.data.size > 0) recordedChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = async () => {
+                    const blob = new Blob(recordedChunks, { type: "audio/webm" });
+                    await sendAudioForTranscription(blob);
+                    stream.getTracks().forEach(track => track.stop());
+                };
+
+                state.mediaRecorder = mediaRecorder;
+                mediaRecorder.start();
+                setIsRecording(true);
+                pushMessage("Recording started...", "bot");
+            } catch (err) {
+                console.error("mic error", err);
+                pushMessage("Microphone access denied or error.", "bot");
+            }
+        }
+
+        function stopRecording() {
+            if (state.mediaRecorder && state.mediaRecorder.state !== "inactive") {
+                state.mediaRecorder.stop();
+            }
+            setIsRecording(false);
+            pushMessage("Recording stopped.", "bot");
+        }
+
+        async function sendAudioForTranscription(audioBlob) {
+            try {
+                setIsTranscribing(true);
+                pushMessage("Sending audio for transcription...", "user");
+                const formData = new FormData();
+                formData.append("file", audioBlob, "voice.webm");
+                const response = await fetch(`${API_BASE}/api/transcribe/`, { 
+                    method: "POST", 
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Token " + getApiToken()
+                    },
+                    body: formData 
+                });
+                const data = await response.json();
+
+                if (data.text) {
+                    pushMessage("Transcription: " + data.text, "bot");
+                    // feed the transcribed text into the chat flow
+                    sendChatToBackend(data.text);
+                } else {
+                    pushMessage("Transcription failed.", "bot");
+                }
+            } catch (err) {
+                console.error("transcribe error", err);
+                pushMessage("Transcription error.", "bot");
+            } finally {
+                setIsTranscribing(false);
+            }
+        }
+
+        // Input handling
+        function handleMobileInputChange(e) {
+            const input = e.target.value;
+
+            const digitsOnly = input.replace(/\D/g, '');
+
+            // Limit to 9 digits max
+            const limitedDigits = digitsOnly.slice(0, 9);
+
+            // Store only digits (no spaces, no +971)
+            setMobileNumber(limitedDigits);
+
+            // Validate
+            const validation = validateUAEMobile(limitedDigits);
+            setMobileError(validation.error);
+
+            if (limitedDigits.length > 0) {
+                setMessageInput('+971' + limitedDigits);
+            } else {
+                setMessageInput('');
+            }
+        }
+
+        function handleTextInputChange(e) {
+            setMessageInput(e.target.value);
+        }
+
+        function handleKeyPress(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                if (state.missingFieldsQueue && state.missingFieldsQueue.length > 0 && state.missingFieldsQueue[0] === "mobile") {
+                    handleMobileSend();
+                } else {
+                    handleSendClick();
+                }
+            }
+        }
+
+        function handleSendClick() {
+            markChatStarted();
+            if (state.missingFieldsQueue && state.missingFieldsQueue.length > 0 && state.missingFieldsQueue[0] === "mobile") {
+                handleMobileSend();
+            } else {
+                handleSendMessage();
+            }
+        }
+
+        function markChatStarted() {
+            localStorage.setItem(LANDING_KEY, "true");
+            hideLanding();
+            document.querySelector(".welcome-message")?.remove();
+        }
+
+
+        function handleSendMessage() {
+            if (!state.messageInput.trim()) return;
+
+            const now = Date.now();
+            if (now - state.lastActionTime < 500) {
+                console.log("⚠️ Message sent too soon, debouncing...");
+                return;
+            }
+            state.lastActionTime = now;
+
+            if (state.isProcessingRequest) {
+                console.log("⚠️ Request in progress, please wait...");
+                return;
+            }
+
+            const text = state.messageInput.trim();
+            pushMessage(text, "user");
+            setMessageInput("");
+
+            // If we're waiting for a missing field value (like mobile or DOB)
+            if (state.missingFieldsQueue && state.missingFieldsQueue.length > 0) {
+                const field = state.missingFieldsQueue[0];
+                handleSaveMissingField(field, text);
+                return;
+            }
+
+            // Otherwise, continue normal chat flow
+            sendChatToBackend(text);
+        }
+
+        // UAE Mobile Number Validation
+        function validateUAEMobile(digits) {
+            const cleaned = digits.replace(/\D/g, '');
+
+            // Limit to 9 digits max
+            const limitedDigits = cleaned.slice(0, 9);
+
+            if (limitedDigits.length === 0) {
+                return { valid: false, error: '', digits: '' };
+            }
+
+            // Must start with 5
+            if (!limitedDigits.startsWith('5')) {
+                return {
+                    valid: false,
+                    error: 'UAE mobile numbers must start with 5',
+                    digits: limitedDigits
+                };
+            }
+
+            // Must be exactly 9 digits
+            if (limitedDigits.length < 9) {
+                return {
+                    valid: false,
+                    error: '',
+                    digits: limitedDigits
+                };
+            }
+
+            if (limitedDigits.length === 9) {
+                return { valid: true, error: '', digits: limitedDigits };
+            }
+
+            return { valid: false, error: '', digits: limitedDigits };
+        }
+
+        function handleMobileSend() {
+            const validation = validateUAEMobile(state.mobileNumber);
+
+            if (!validation.valid) {
+                setMobileError('Please enter a valid UAE mobile number (9 digits starting with 5)');
+                return;
+            }
+
+            // Format: +9715XXXXXXXX (no spaces)
+            const mobileToSend = '+971' + validation.digits;
+
+            setMobileNumber("");
+            setMobileError("");
+            setMessageInput("");
+
+            pushMessage(mobileToSend, "user");
+
+            // Save mobile number
+            if (state.missingFieldsQueue && state.missingFieldsQueue.length > 0) {
+                const field = state.missingFieldsQueue[0];
+                if (field === "mobile") {
+                    handleSaveMissingField(field, mobileToSend);
+                    return;
+                }
+            }
+        }
+
+        // Format mobile number for display with spaces
+        function formatMobileDisplay(digits) {
+            if (!digits || digits.length === 0) return '';
+            if (digits.length <= 1) return digits;
+            if (digits.length <= 4) return digits.slice(0, 1) + ' ' + digits.slice(1);
+            return digits.slice(0, 1) + ' ' + digits.slice(1, 4) + ' ' + digits.slice(4);
+        }
+
+        // Product handling
+        async function handleProductClick(product) {
+            setSelectedProduct(product);
+
+            setProducts([]);
+
+            const userMessage = `Selected: ${product.name} (${product.plan})`;
+            pushMessage(userMessage, "user");
+
+            console.log("🖱️ Product clicked:", product);
+
+            let detailsMessage = `🎯 ${product.name} - ${product.plan}\n\n`;
+            detailsMessage += `💰 Price: ${product.price} AED\n`;
+            detailsMessage += `📊 Coverage: Basic Medical Insurance\n\n`;
+
+            const hasValidUrl = product.url &&
+                product.url !== "undefined" &&
+                product.url !== "null" &&
+                (product.url.startsWith('http') || product.url.startsWith('https'));
+
+            if (hasValidUrl) {
+                detailsMessage += `🔗 Plan Details & Application:\n`;
+                detailsMessage += `${product.url}\n\n`;
+                detailsMessage += `💡 Click the link above to view full details and start your application.`;
+            } else {
+                // If no URL, provide alternative contact information
+                detailsMessage += `🔗 Application Link: Not available\n\n`;
+                detailsMessage += `📞 Contact Us: +971-4-123-4567\n`;
+                detailsMessage += `📧 Email: applications@gia-insurance-provider.com\n\n`;
+                detailsMessage += `Please contact our team directly to apply for this plan.`;
+
+                console.warn("❌ No valid URL found for product:", {
+                    name: product.name,
+                    url: product.url,
+                    urlType: typeof product.url
+                });
+            }
+
+            pushMessage(detailsMessage, "bot");
+
+            // Save product selection and details to database
+            if (state.sessionId) {
+                try {
+                    // Send product selection to backend - backend will detect it's a product selection
+                    // and save both user message and bot details message
+                    await fetch(`${API_BASE}/api/insurance-chat/`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": "Token " + getApiToken()
+                        },
+                        credentials: "include",
+                        body: JSON.stringify({
+                            user_text: userMessage,
+                            session_id: state.sessionId,
+                            product_details: detailsMessage  // Pass details to save
+                        })
+                    });
+                } catch (error) {
+                    console.error("Failed to save product selection to database:", error);
+                    // Don't block UI, just log the error
+                }
+            }
+        }
+
+        function setMessages(messages) {
+            if (typeof messages === 'function') {
+                state.messages = messages(state.messages || []);
+            } else {
+                state.messages = messages;
+            }
+            renderMessages();
+        }
+
+        function setOptions(options) {
+            state.options = options;
+            renderOptions();
+        }
+
+        function setSessionId(sessionId) {
+            state.sessionId = sessionId;
+            // Update URL when sessionId is set
+            if (sessionId) {
+                updateURLWithChatId(sessionId);
+                localStorage.setItem("insurance_session_id", sessionId);
+            } else {
+                updateURLWithChatId(null);
+                localStorage.removeItem("insurance_session_id");
+            }
+        }
+
+        function setIsProcessing(isProcessing) {
+            state.isProcessing = isProcessing;
+            updateUIState();
+        }
+
+        function setCurrentStep(step) {
+            state.currentStep = step;
+            updateFileButton();
+        }
+
+        function setEmiratesRecord(record) {
+            state.emiratesRecord = record;
+        }
+
+        function setFileProcessingLabel(label) {
+            state.fileProcessingLabel = label;
+            renderFileProcessing();
+        }
+
+        function setUploadingSide(side) {
+            state.uploadingSide = side;
+        }
+
+        function setMissingFieldsQueue(queue) {
+            state.missingFieldsQueue = queue;
+            updateInputMode();
+        }
+
+        function setCurrentMissingValue(value) {
+            state.currentMissingValue = value;
+        }
+
+        function setRecordId(id) {
+            state.recordId = id;
+        }
+
+        function setIsRecording(isRecording) {
+            state.isRecording = isRecording;
+            updateVoiceButton();
+            updateRecordingStatus();
+        }
+
+        function setShowTyping(show) {
+            state.showTyping = show;
+            renderTypingIndicator();
+        }
+
+        function setMessageInput(input) {
+            state.messageInput = input;
+            elements.textInput.value = input;
+            updateSendButton();
+        }
+
+        function setNextUploadSide(side) {
+            state.nextUploadSide = side;
+        }
+
+        function setIsTranscribing(isTranscribing) {
+            state.isTranscribing = isTranscribing;
+            updateRecordingStatus();
+        }
+
+        function setMissingFieldInputMode(mode) {
+            state.missingFieldInputMode = mode;
+            updateInputMode();
+        }
+
+        function setMobileNumber(number) {
+            state.mobileNumber = number;
+            elements.mobileInput.value = formatMobileDisplay(number);
+        }
+
+        function setMobileError(error) {
+            state.mobileError = error;
+            if (error) {
+                elements.mobileInputError.textContent = error;
+                elements.mobileInputError.classList.remove('hidden');
+                elements.mobileInputHelper.classList.add('hidden');
+            } else {
+                elements.mobileInputError.classList.add('hidden');
+                if (state.mobileNumber.length === 0) {
+                    elements.mobileInputHelper.classList.remove('hidden');
+                } else {
+                    elements.mobileInputHelper.classList.add('hidden');
+                }
+            }
+        }
+
+        function setProducts(products) {
+            state.products = products;
+            renderProducts();
+        }
+
+        function setSelectedProduct(product) {
+            state.selectedProduct = product;
+        }
+
+        function setPostMobileMissingFields(fields) {
+            state.postMobileMissingFields = fields;
+        }
+
+        // Authentication state setters
+        function setIsAuthenticated(authenticated) {
+            state.isAuthenticated = authenticated;
+            elements.authStatus.className = `status-indicator ${authenticated ? 'authenticated' : 'unauthenticated'}`;
+            updateAvatarTooltip();
+        }
+
+        function setIsVerified(verified) {
+            state.isVerified = verified;
+        }
+
+        function setAuthError(error) {
+            state.authError = error;
+            if (error) {
+                elements.authError.textContent = error;
+                elements.authError.classList.remove('hidden');
+            } else {
+                elements.authError.classList.add('hidden');
+            }
+        }
+
+        function setEmail(email) {
+            state.email = email;
+            elements.emailInput.value = email;
+        }
+
+        function setOtp(otp) {
+            state.otp = otp;
+            elements.otpInput.value = otp;
+        }
+
+        function setOtpSent(sent) {
+            state.otpSent = sent;
+            if (sent) {
+                elements.otpSendSection.classList.add('hidden');
+                elements.otpVerifySection.classList.remove('hidden');
+            } else {
+                elements.otpSendSection.classList.remove('hidden');
+                elements.otpVerifySection.classList.add('hidden');
+            }
+        }
+
+        function setChatHistory(history) {
+            state.chatHistory = history;
+            renderChatHistory();
+        }
+
+        function setHistoryLoading(loading) {
+            state.historyLoading = loading;
+            if (loading) {
+                elements.historyLoading.classList.remove('hidden');
+                elements.emptyHistory.classList.add('hidden');
+                elements.historyList.classList.add('hidden');
+            } else {
+                elements.historyLoading.classList.add('hidden');
+                if (state.chatHistory.length === 0) {
+                    elements.emptyHistory.classList.remove('hidden');
+                    elements.historyList.classList.add('hidden');
+                } else {
+                    elements.emptyHistory.classList.add('hidden');
+                    elements.historyList.classList.remove('hidden');
+                }
+            }
+        }
+
+        function renderMessages() {
+            const messagesArea = elements.messagesArea;
+
+            if (!Array.isArray(state.messages)) {
+                state.messages = [];
+            }
+
+            // Clear existing messages
+            const existingMessages = messagesArea.querySelectorAll('.message, .welcome-message, .options-container, .products-grid, .typing-indicator, .file-processing');
+            existingMessages.forEach(el => {
+                gsap.killTweensOf(el);
+                gsap.killTweensOf(el.querySelectorAll('*'));
+                el.remove();
+            });
+
+            // If no messages, show welcome message
+            if (state.messages.length === 0 && !state.showTyping) {
+                const welcomeMessage = document.createElement('div');
+                welcomeMessage.className = 'welcome-message';
+                welcomeMessage.innerHTML = `
+                    <div class="welcome-icon">👋</div>
+                    <div class="welcome-title">Welcome!</div>
+                    <div class="welcome-subtitle">I'm here to help with your medical insurance needs</div>
+                `;
+                messagesArea.appendChild(welcomeMessage);
+                return;
+            }
+
+            state.messages.forEach(message => {
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${message.from}`;
+
+                const bubbleEl = document.createElement('div');
+                bubbleEl.className = 'message-bubble';
+
+                const textWithLinks = message.text.split('\n').map(line => {
+                    const urlMatch = line.match(/(https?:\/\/[^\s]+)/);
+                    if (urlMatch) {
+                        const url = urlMatch[1];
+                        const beforeUrl = line.split(url)[0];
+                        const afterUrl = line.split(url)[1];
+
+                        return `${beforeUrl}<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>${afterUrl}`;
+                    }
+                    return line;
+                }).join('<br>');
+
+                bubbleEl.innerHTML = textWithLinks;
+                messageEl.appendChild(bubbleEl);
+                messagesArea.appendChild(messageEl);
+
+                // Animate if new
+                if (!state.animatedMessageIds.has(message.id)) {
+                    gsapAnimations.animateMessage(messageEl);
+                    state.animatedMessageIds.add(message.id);
+                }
+            });
+
+            renderOptions();
+            renderProducts();
+            renderTypingIndicator();
+            renderFileProcessing();
+
+            scrollToBottom();
+        }
+
+        function renderOptions() {
+            const existingOptions = elements.messagesArea.querySelector('.options-container');
+            if (existingOptions) {
+                existingOptions.remove();
+            }
+
+            // If no options, return
+            if (!state.options || state.options.length === 0) return;
+
+            const optionsContainer = document.createElement('div');
+            optionsContainer.className = 'options-container';
+
+            state.options.forEach(option => {
+                const optionButton = document.createElement('button');
+                optionButton.className = 'option-button';
+                optionButton.textContent = option;
+                optionButton.addEventListener('click', () => handleOptionClick(option));
+                optionsContainer.appendChild(optionButton);
+            });
+
+            elements.messagesArea.appendChild(optionsContainer);
+
+            scrollToBottom();
+        }
+
+        function renderProducts() {
+            const existingProducts = elements.messagesArea.querySelector('.products-grid');
+            if (existingProducts) {
+                existingProducts.remove();
+            }
+
+            // If no products, return
+            if (!state.products || state.products.length === 0) return;
+
+            const productsGrid = document.createElement('div');
+            productsGrid.className = 'products-grid';
+
+            state.products.forEach((product, index) => {
+                const productCard = document.createElement('div');
+                productCard.className = 'product-card';
+                // GSAP handles animation now
+                productCard.addEventListener('click', () => handleProductClick(product));
+
+                const icons = ['🏆', '✨', '⚡', '📦'];
+                const icon = icons[index % icons.length];
+
+                productCard.innerHTML = `
+                    <div class="product-card-content">
+                        <div class="product-header">
+                            <div class="product-icon">${icon}</div>
+                            <div class="product-info">
+                                <h3 class="product-name">${product.name}</h3>
+                                <div class="product-plan">
+                                    <span class="product-plan-check">✓</span>
+                                    <span class="product-plan-text">${product.plan}</span>
+                                </div>
+                            </div>
+                            <div class="product-price">${product.price} AED</div>
+                        </div>
+                        <div class="product-hint">
+                            <span class="product-hint-text">Click to view details</span>
+                        </div>
+                        <div class="product-divider"></div>
+                    </div>
+                `;
+
+                productsGrid.appendChild(productCard);
+            });
+
+            elements.messagesArea.appendChild(productsGrid);
+            gsapAnimations.revealProducts(productsGrid);
+
+            scrollToBottom();
+        }
+
+        function renderTypingIndicator() {
+            const existingTyping = elements.messagesArea.querySelector('.typing-indicator');
+            if (existingTyping) {
+                gsap.killTweensOf(existingTyping);
+                gsap.killTweensOf(existingTyping.querySelectorAll('*'));
+                existingTyping.remove();
+            }
+
+            if (!state.showTyping) return;
+
+            // Create typing indicator
+            const typingIndicator = document.createElement('div');
+            typingIndicator.className = 'typing-indicator';
+            typingIndicator.innerHTML = `
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+                <span class="typing-text">Assistant is typing...</span>
+            `;
+
+            elements.messagesArea.appendChild(typingIndicator);
+
+            // GSAP pulse animation for dots
+            gsap.to(typingIndicator.querySelectorAll('.typing-dot'), {
+                scale: 1.5,
+                opacity: 0.5,
+                duration: 0.6,
+                stagger: 0.2,
+                repeat: -1,
+                yoyo: true,
+                ease: "power1.inOut"
+            });
+
+            scrollToBottom();
+        }
+
+        function renderFileProcessing() {
+            // Remove existing file processing indicator
+            const existingProcessing = elements.messagesArea.querySelector('.file-processing');
+            if (existingProcessing) {
+                gsap.killTweensOf(existingProcessing);
+                gsap.killTweensOf(existingProcessing.querySelectorAll('*'));
+                existingProcessing.remove();
+            }
+
+            // If no file processing label, return
+            if (!state.fileProcessingLabel) return;
+
+            const fileProcessing = document.createElement('div');
+            fileProcessing.className = 'file-processing';
+            fileProcessing.innerHTML = `
+                <div class="processing-spinner"></div>
+                <span>${state.fileProcessingLabel || "Processing..."}</span>
+            `;
+
+            elements.messagesArea.appendChild(fileProcessing);
+
+            // GSAP Spinner
+            gsap.to(fileProcessing.querySelector('.processing-spinner'), {
+                rotation: 360,
+                duration: 1,
+                repeat: -1,
+                ease: "linear"
+            });
+
+            // Text Pulse
+            gsap.to(fileProcessing.querySelector('span'), {
+                opacity: 0.5,
+                duration: 0.8,
+                repeat: -1,
+                yoyo: true,
+                ease: "sine.inOut"
+            });
+
+            scrollToBottom();
+        }
+
+        function renderChatHistory() {
+            const historyList = elements.historyList;
+            // Since we are clearing innerHTML, we should kill tweens on children first
+            gsap.killTweensOf(historyList.querySelectorAll('*'));
+            historyList.innerHTML = '';
+
+            state.chatHistory.forEach((session, index) => {
+                // Display label: created_at and optionally emirates_id or step
+                const createdAt = session.created_at || session.created || session.timestamp || "";
+                const label =
+                    (session.emirates_id ? `ID: ${session.emirates_id} • ` : "") +
+                    (session.step ? `${session.step}` : "") +
+                    (createdAt ? ` • ${new Date(createdAt).toLocaleString()}` : "");
+
+                const historyItem = document.createElement('li');
+                const historyButton = document.createElement('button');
+                historyButton.className = 'history-item';
+
+                // Active session highlight
+                const sid = session.session_id || session.sessionId || session.id;
+                if (sid && String(sid) === String(state.sessionId)) {
+                    historyButton.classList.add('active');
+                }
+
+                historyButton.addEventListener('click', () => handleChooseSession(session));
+
+                historyButton.innerHTML = `
+                    <div class="history-label">${label || `Chat #${index + 1}`}</div>
+                    <div class="history-hint">Click to continue this conversation</div>
+                `;
+
+                historyItem.appendChild(historyButton);
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        function updateUIState() {
+            updateFileButton();
+
+            updateVoiceButton();
+
+            updateSendButton();
+
+            updateRecordingStatus();
+
+            updateInputMode();
+        }
+
+        function updateFileButton() {
+            let title = "Attach File";
+
+            if (state.currentStep === "awaiting_passport") {
+                title = "Upload Passport";
+                elements.fileButton.style.background = "linear-gradient(to right, #B99A4F, #1d375f)";
+                elements.fileButton.style.color = "#fff";
+            } else if (state.currentStep === "awaiting_id_frontside" ||
+                state.currentStep === "q3" ||
+                state.currentStep === "start") {
+                title = "Upload Emirates ID Front";
+                elements.fileButton.style.background = "linear-gradient(to right, #B99A4F, #1d375f)";
+                elements.fileButton.style.color = "#fff";
+            } else {
+                elements.fileButton.style.background = "linear-gradient(to right, #B99A4F, #1d375f)";
+                elements.fileButton.style.color = "#fff";
+            }
+
+            elements.fileButton.title = title;
+            elements.fileButton.disabled = state.isProcessing;
+
+            if (state.isProcessing) {
+                elements.fileButton.classList.add('disabled');
+            } else {
+                elements.fileButton.classList.remove('disabled');
+            }
+        }
+
+        function updateVoiceButton() {
+            if (state.isRecording) {
+                elements.voiceButton.classList.add('recording');
+                elements.voiceButton.innerHTML = '⏹';
+                elements.voiceButton.title = 'Stop Recording';
+            } else {
+                elements.voiceButton.classList.remove('recording');
+                elements.voiceButton.innerHTML = '🎤';
+                elements.voiceButton.title = 'Start Recording';
+            }
+        }
+
+        function updateSendButton() {
+            if (state.missingFieldsQueue && state.missingFieldsQueue.length > 0 && state.missingFieldsQueue[0] === "mobile") {
+                // For mobile input
+                const validation = validateUAEMobile(state.mobileNumber);
+                elements.sendButton.disabled = !state.mobileNumber || state.mobileNumber.length !== 9 ||
+                    state.mobileError || !validation.valid;
+            } else {
+                // For regular text input
+                elements.sendButton.disabled = !state.messageInput.trim();
+            }
+
+            if (elements.sendButton.disabled) {
+                elements.sendButton.classList.add('disabled');
+            } else {
+                elements.sendButton.classList.remove('disabled');
+            }
+        }
+
+        function updateRecordingStatus() {
+            if (state.isRecording || state.isTranscribing) {
+                elements.recordingStatus.classList.remove('hidden');
+                elements.recordingText.textContent = state.isRecording ?
+                    "Recording audio..." : "Processing/Transcribing audio...";
+            } else {
+                elements.recordingStatus.classList.add('hidden');
+            }
+        }
+
+        function updateInputMode() {
+            if (state.missingFieldsQueue && state.missingFieldsQueue.length > 0 && state.missingFieldsQueue[0] === "mobile") {
+                // Show mobile input, hide text input
+                elements.mobileInputContainer.classList.remove('hidden');
+                elements.textInput.classList.add('hidden');
+
+                // Set mobile input helper based on current input
+                if (state.mobileNumber.length === 0) {
+                    elements.mobileInputHelper.classList.remove('hidden');
+                } else {
+                    elements.mobileInputHelper.classList.add('hidden');
+                }
+            } else {
+                // Show text input, hide mobile input
+                elements.mobileInputContainer.classList.add('hidden');
+                elements.textInput.classList.remove('hidden');
+                elements.mobileInputError.classList.add('hidden');
+                elements.mobileInputHelper.classList.add('hidden');
+            }
+        }
+
+        function scrollToBottom() {
+            setTimeout(() => {
+                elements.messagesArea.scrollTop = elements.messagesArea.scrollHeight;
+            }, 100);
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
+
+</html>
